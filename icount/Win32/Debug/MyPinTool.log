@@ -1,0 +1,6 @@
+﻿  analyzer.cpp
+analyzer.cpp(25): warning C4010: single-line comment contains line-continuation character
+analyzer.cpp(26): warning C4010: single-line comment contains line-continuation character
+analyzer.cpp(27): warning C4010: single-line comment contains line-continuation character
+     Creating library C:\Pin35\icount32.lib and object C:\Pin35\icount32.exp
+  MyPinTool.vcxproj -> C:\Pin35\icount32.dll

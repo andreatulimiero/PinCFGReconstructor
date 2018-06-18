@@ -30,14 +30,9 @@ void recordInRawTrace(const char* buf, size_t buf_len, trace_t* trace) {
 	trace->cursor += buf_len;
 }
 
-void printAllRawTrace(FILE* f) {
-	size_t trace_no = 0;
-	trace_t* trace = traces[trace_no];
-	while (trace != NULL) {
-		for (size_t i = 0; i < trace->cursor; i++) {
-			fputc(trace->buf[i], f);
-		}
-		trace = traces[++trace_no];
+void printAllRawTrace(FILE* f, trace_t* trace) {
+	for (size_t i = 0; i < trace->cursor; i++) {
+		fputc(trace->buf[i], f);
 	}
 }
 
@@ -81,23 +76,6 @@ void INS_JumpAnalysis(ADDRINT target_branch, INT32 taken, THREADID thread_idx) {
 }
 
 void Trace(TRACE trace, void* v) {
-	// Let's whitelist the instrumented program only
-	RTN rtn = TRACE_Rtn(trace);
-	if (RTN_Valid(rtn)) {
-		SEC sec = RTN_Sec(rtn);
-		if (SEC_Valid(sec)) {
-			IMG img = SEC_Img(sec);
-			if (IMG_Valid(img)) {
-				if (!strstr(IMG_Name(img).c_str(), prog_name)) {
-					//fprintf(stdout, "[-] Ignoring %s\n", IMG_Name(img).c_str());
-					return;
-				}
-				//fprintf(stdout, "[+] Instrumenting %s <= %s\n", IMG_Name(img).c_str(), prog_name);
-				//fflush(stdout);
-			} else return;
-		} else return;
-	} else return;
-
 	for (BBL bbl = TRACE_BblHead(trace); BBL_Valid(bbl); bbl = BBL_Next(bbl)) {
 		for (INS ins = BBL_InsHead(bbl); INS_Valid(ins); ins = INS_Next(ins)) {
 			string disassembled_ins_s = INS_Disassemble(ins);
@@ -168,7 +146,7 @@ void ThreadStart(THREADID thread_idx, CONTEXT* ctx, INT32 flags, VOID* v) {
 void ThreadFini(THREADID thread_idx, const CONTEXT* ctx, INT32 code, VOID* v) {
 	fprintf(stdout, "[*] Finished thread %d\n", thread_idx);
 	if (isBuffered)
-		printAllRawTrace(files[thread_idx]);
+		printAllRawTrace(files[thread_idx], (trace_t*) PIN_GetThreadData(tls_key, thread_idx));
 	fprintf(stdout, "[+] Trace for thread #%d saved\n", thread_idx);
 }
 

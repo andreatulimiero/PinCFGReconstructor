@@ -12,7 +12,7 @@ PIN_LOCK pin_lock;
 
 static size_t spawned_threads_no;
 
-bool isBuffered = true;
+bool isBuffered = false;
 bool isFirstIns = true;
 const char* prog_name;
 
@@ -30,7 +30,7 @@ void recordInRawTrace(const char* buf, size_t buf_len, trace_t* trace) {
 	trace->cursor += buf_len;
 }
 
-void printAllRawTrace(FILE* f, trace_t* trace) {
+void printAllRawTraces(FILE* f, trace_t* trace) {
 	for (size_t i = 0; i < trace->cursor; i++) {
 		fputc(trace->buf[i], f);
 	}
@@ -46,11 +46,12 @@ void INS_Analysis(char* disassembled_ins, UINT32 disassembled_ins_len, THREADID 
 	trace_t* trace = (trace_t*)PIN_GetThreadData(tls_key, thread_idx);
 	// Trace limit guard
 	if (trace->cursor + disassembled_ins_len >= TRACE_LIMIT) return;
+
 	if (isBuffered) {
 		recordInRawTrace(disassembled_ins, disassembled_ins_len, trace);
-	} else {
-		printRawTrace(files[thread_idx], disassembled_ins, disassembled_ins_len);
 	}
+	else
+		printRawTrace(files[thread_idx], disassembled_ins, disassembled_ins_len);
 }
 
 void INS_JumpAnalysis(ADDRINT target_branch, INT32 taken, THREADID thread_idx) {
@@ -65,12 +66,14 @@ void INS_JumpAnalysis(ADDRINT target_branch, INT32 taken, THREADID thread_idx) {
 	size_t buf_len = (sizeof(ADDRINT) * 2 + 5);
 	// Trace limit guard
 	if (trace->cursor + buf_len >= TRACE_LIMIT) return;
+
 	char* buf = (char*)calloc(1, sizeof(char) * buf_len);
 	buf[0] = '\n';
 	buf[1] = '@';
 	sprintf(buf + 2, "%x", target_branch);
 	if (isBuffered)
-		recordInRawTrace(buf, buf_len, trace);
+		return;
+		//recordInRawTrace(buf, buf_len, trace);
 	else
 		printRawTrace(files[thread_idx], buf, buf_len);
 }
@@ -119,6 +122,7 @@ void ThreadStart(THREADID thread_idx, CONTEXT* ctx, INT32 flags, VOID* v) {
 	fprintf(stdout, "[*] Spawned thread %d\n", thread_idx);
 	fflush(stdout);
 
+	PIN_GetLock(&pin_lock, thread_idx);
 	/* Create output file */
 	char filename[TRACE_NAME_LENGTH_LIMIT] = { 0 };
 	sprintf(filename, "trace_%d.out", thread_idx);
@@ -127,7 +131,6 @@ void ThreadStart(THREADID thread_idx, CONTEXT* ctx, INT32 flags, VOID* v) {
 	fflush(stdout);
 
 	/* Initialize a raw trace per thread */
-	PIN_GetLock(&pin_lock, thread_idx);
 	trace_t* trace = (trace_t*)malloc(sizeof(trace_t*));
 	trace->buf = (char*)malloc(sizeof(char) * RAW_TRACE_BUF_SIZE);
 	trace->cursor = 0;
@@ -140,14 +143,15 @@ void ThreadStart(THREADID thread_idx, CONTEXT* ctx, INT32 flags, VOID* v) {
 	}
 	spawned_threads_no++;
 	PIN_ReleaseLock(&pin_lock);
-
 }
 
 void ThreadFini(THREADID thread_idx, const CONTEXT* ctx, INT32 code, VOID* v) {
 	fprintf(stdout, "[*] Finished thread %d\n", thread_idx);
+	fflush(stdout);
 	if (isBuffered)
-		printAllRawTrace(files[thread_idx], (trace_t*) PIN_GetThreadData(tls_key, thread_idx));
+		printAllRawTraces(files[thread_idx], (trace_t*) PIN_GetThreadData(tls_key, thread_idx));
 	fprintf(stdout, "[+] Trace for thread #%d saved\n", thread_idx);
+	fflush(stdout);
 }
 
 void Fini(INT32 code, VOID *v) {

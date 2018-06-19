@@ -36,3 +36,5 @@
 
 # Pin
 pin.log
+*.db
+*opendb

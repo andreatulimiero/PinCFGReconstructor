@@ -7,12 +7,12 @@ static TLS_KEY tls_key = INVALID_TLS_KEY;
 PIN_LOCK pin_lock;
 
 /** Custom options for our PIN tool **/
-//KNOB<string> KnobBufferedOption(KNOB_MODE_WRITEONCE, "pintool",
-							//"buffered", false, "<buffered>");
+KNOB <BOOL> KnobIsBuffered(KNOB_MODE_WRITEONCE, "pintool",
+	"buffered", "false", "whether or not the trace is buffered");
 
 static size_t spawned_threads_no;
 
-bool isBuffered = false;
+bool isBuffered;
 bool isFirstIns = true;
 const char* prog_name;
 
@@ -61,8 +61,7 @@ void INS_JumpAnalysis(ADDRINT target_branch, INT32 taken, THREADID thread_idx) {
 	- @ char (1 byte)
 	- address in hex format (sizeof(ADDRINT) * 2 bytes) + '0x' prefix (2 bytes)
 	- \n delimiter (1 byte)
-	- 0 terminator (1 byte)
-	*/
+	- 0 terminator (1 byte)*/
 	size_t buf_len = (sizeof(ADDRINT) * 2 + 5);
 	// Trace limit guard
 	if (trace->cursor + buf_len >= TRACE_LIMIT) return;
@@ -72,8 +71,7 @@ void INS_JumpAnalysis(ADDRINT target_branch, INT32 taken, THREADID thread_idx) {
 	buf[1] = '@';
 	sprintf(buf + 2, "%x", target_branch);
 	if (isBuffered)
-		return;
-		//recordInRawTrace(buf, buf_len, trace);
+		recordInRawTrace(buf, buf_len, trace);
 	else
 		printRawTrace(files[thread_idx], buf, buf_len);
 }
@@ -127,12 +125,12 @@ void ThreadStart(THREADID thread_idx, CONTEXT* ctx, INT32 flags, VOID* v) {
 	char filename[TRACE_NAME_LENGTH_LIMIT] = { 0 };
 	sprintf(filename, "trace_%d.out", thread_idx);
 	FILE* out = fopen(filename, "w+");
-	fprintf(stdout, "[+] Created file %s => %x\n", filename, out);
+	fprintf(stdout, "[+] Created file %s\n", filename);
 	fflush(stdout);
 
 	/* Initialize a raw trace per thread */
 	trace_t* trace = (trace_t*)malloc(sizeof(trace_t*));
-	trace->buf = (char*)malloc(sizeof(char) * RAW_TRACE_BUF_SIZE);
+	trace->buf = (char*)malloc(sizeof(char) * TRACE_LIMIT);
 	trace->cursor = 0;
 	files[thread_idx] = out;
 
@@ -154,6 +152,11 @@ void ThreadFini(THREADID thread_idx, const CONTEXT* ctx, INT32 code, VOID* v) {
 	fflush(stdout);
 }
 
+void Config() {
+	isBuffered = KnobIsBuffered.Value();
+	fprintf(stdout, "[*] Is Buffered? %d\n", isBuffered);
+}
+
 void Fini(INT32 code, VOID *v) {
 	fprintf(stdout, "=======================\n");
 	fprintf(stdout, "Trace finished\n");
@@ -168,6 +171,9 @@ int main(int argc, char *argv[]) {
 		fprintf(stderr, "[x] An error occured while initiating PIN\n");
 		return 0;
 	}
+
+	/* Prepare the Pintool */
+	Config();
 
 	/* Prepare TLS */
 	tls_key = PIN_CreateThreadDataKey(NULL);

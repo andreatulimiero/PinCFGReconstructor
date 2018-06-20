@@ -12,7 +12,6 @@ typedef struct trace_s {
 #define INS_DELIMITER '\n'
 #define ADDR_CHARS sizeof(ADDRINT)
 
-#define RAW_TRACE_BUF_SIZE 512*Kb
-#define TRACE_LIMIT 256*Mb
+#define TRACE_LIMIT 128*Mb
 #define TRACE_NAME_LENGTH_LIMIT 128
 #define THREADS_MAX_NO 256

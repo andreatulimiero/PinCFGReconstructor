@@ -76,43 +76,39 @@ void INS_JumpAnalysis(ADDRINT target_branch, INT32 taken, THREADID thread_idx) {
 		printRawTrace(files[thread_idx], buf, buf_len);
 }
 
-void Trace(TRACE trace, void* v) {
-	for (BBL bbl = TRACE_BblHead(trace); BBL_Valid(bbl); bbl = BBL_Next(bbl)) {
-		for (INS ins = BBL_InsHead(bbl); INS_Valid(ins); ins = INS_Next(ins)) {
-			string disassembled_ins_s = INS_Disassemble(ins);
-			/* Allocate enough space to save
-			- Disassembled instruction (n bytes)
-			- INS_DELIMITER (1 byte)
-			- 0 terminator (1 byte)
-			*/
-			uint32_t disassembled_ins_len = strlen(disassembled_ins_s.c_str()) + 2;
-			char* disassembled_ins = (char*)calloc(1, sizeof(char) * (disassembled_ins_len));
-			disassembled_ins[0] = INS_DELIMITER;
-			strcpy(disassembled_ins + 1, disassembled_ins_s.c_str());
-			if (isFirstIns) {
-				isFirstIns = false;
-				strcpy(disassembled_ins, disassembled_ins + 1);
-			}
+void Ins(INS ins, void* v) {
+	string disassembled_ins_s = INS_Disassemble(ins);
+	/* Allocate enough space to save
+	- Disassembled instruction (n bytes)
+	- INS_DELIMITER (1 byte)
+	- 0 terminator (1 byte)
+	*/
+	uint32_t disassembled_ins_len = strlen(disassembled_ins_s.c_str()) + 2;
+	char* disassembled_ins = (char*)calloc(1, sizeof(char) * (disassembled_ins_len));
+	disassembled_ins[0] = INS_DELIMITER;
+	strcpy(disassembled_ins + 1, disassembled_ins_s.c_str());
+	if (isFirstIns) {
+		isFirstIns = false;
+		strcpy(disassembled_ins, disassembled_ins + 1);
+	}
 
-			INS_InsertCall(ins, IPOINT_BEFORE,
-				(AFUNPTR)INS_Analysis,
-						   IARG_PTR,
-						   disassembled_ins,
-						   IARG_UINT32,
-						   disassembled_ins_len,
-						   IARG_THREAD_ID,
-						   IARG_END);
+	INS_InsertCall(ins, IPOINT_BEFORE,
+		(AFUNPTR)INS_Analysis,
+		IARG_PTR,
+		disassembled_ins,
+		IARG_UINT32,
+		disassembled_ins_len,
+		IARG_THREAD_ID,
+		IARG_END);
 
 
-			if (INS_IsBranchOrCall(ins)) {
-				INS_InsertCall(ins, IPOINT_BEFORE,
-					(AFUNPTR)INS_JumpAnalysis,
-							   IARG_BRANCH_TARGET_ADDR,
-							   IARG_BRANCH_TAKEN,
-							   IARG_THREAD_ID,
-							   IARG_END);
-			}
-		}
+	if (INS_IsBranchOrCall(ins)) {
+		INS_InsertCall(ins, IPOINT_BEFORE,
+			(AFUNPTR)INS_JumpAnalysis,
+			IARG_BRANCH_TARGET_ADDR,
+			IARG_BRANCH_TAKEN,
+			IARG_THREAD_ID,
+			IARG_END);
 	}
 }
 
@@ -186,7 +182,7 @@ int main(int argc, char *argv[]) {
 	PIN_InitLock(&pin_lock);
 
 	prog_name = argv[argc - 1];
-	TRACE_AddInstrumentFunction(Trace, 0);
+	INS_AddInstrumentFunction(Ins, 0);
 
 	PIN_AddThreadStartFunction(ThreadStart, 0);
 	PIN_AddThreadFiniFunction(ThreadFini, 0);

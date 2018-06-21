@@ -9,10 +9,14 @@ PIN_LOCK pin_lock;
 /** Custom options for our PIN tool **/
 KNOB <BOOL> KnobIsBuffered(KNOB_MODE_WRITEONCE, "pintool",
 	"buffered", "false", "whether or not the trace is buffered");
+KNOB <size_t> KnobTraceLimit(KNOB_MODE_WRITEONCE, "pintool",
+	"trace_limit", "0", "size of the trace limit");
 
 static size_t spawned_threads_no;
 
 bool isBuffered;
+size_t trace_limit;
+
 bool isFirstIns = true;
 const char* prog_name;
 
@@ -20,6 +24,7 @@ short unsigned int hasDone = 0;
 
 trace_t* traces[THREADS_MAX_NO];
 FILE* files[THREADS_MAX_NO];
+bool hasReachedTraceLimit[THREADS_MAX_NO];
 
 //#define recordInRawTrace(buf, buf_len, trace) do {\
 		memcpy(trace->buf + trace->cursor, buf, buf_len);\
@@ -45,7 +50,10 @@ void printRawTrace(FILE* f, const char* buf, size_t buf_len) {
 void INS_Analysis(char* disassembled_ins, UINT32 disassembled_ins_len, THREADID thread_idx) {
 	trace_t* trace = (trace_t*)PIN_GetThreadData(tls_key, thread_idx);
 	// Trace limit guard
-	if (trace->cursor + disassembled_ins_len >= TRACE_LIMIT) return;
+	if (trace->cursor + disassembled_ins_len >= trace_limit) {
+		hasReachedTraceLimit[thread_idx] = true;
+		return;
+	}
 
 	if (isBuffered) {
 		recordInRawTrace(disassembled_ins, disassembled_ins_len, trace);
@@ -64,7 +72,10 @@ void INS_JumpAnalysis(ADDRINT target_branch, INT32 taken, THREADID thread_idx) {
 	- 0 terminator (1 byte)*/
 	size_t buf_len = (sizeof(ADDRINT) * 2 + 5);
 	// Trace limit guard
-	if (trace->cursor + buf_len >= TRACE_LIMIT) return;
+	if (trace->cursor + buf_len >= trace_limit) {
+		hasReachedTraceLimit[thread_idx] = true;
+		return;
+	}
 
 	char* buf = (char*)calloc(1, sizeof(char) * buf_len);
 	buf[0] = '\n';
@@ -78,6 +89,7 @@ void INS_JumpAnalysis(ADDRINT target_branch, INT32 taken, THREADID thread_idx) {
 
 void Ins(INS ins, void* v) {
 	string disassembled_ins_s = INS_Disassemble(ins);
+	//string disassembled_ins_s = "Hello World!";
 	/* Allocate enough space to save
 	- Disassembled instruction (n bytes)
 	- INS_DELIMITER (1 byte)
@@ -126,7 +138,7 @@ void ThreadStart(THREADID thread_idx, CONTEXT* ctx, INT32 flags, VOID* v) {
 
 	/* Initialize a raw trace per thread */
 	trace_t* trace = (trace_t*)malloc(sizeof(trace_t*));
-	trace->buf = (char*)malloc(sizeof(char) * TRACE_LIMIT);
+	trace->buf = (char*)malloc(sizeof(char) * trace_limit);
 	trace->cursor = 0;
 	files[thread_idx] = out;
 
@@ -140,17 +152,23 @@ void ThreadStart(THREADID thread_idx, CONTEXT* ctx, INT32 flags, VOID* v) {
 }
 
 void ThreadFini(THREADID thread_idx, const CONTEXT* ctx, INT32 code, VOID* v) {
-	fprintf(stdout, "[*] Finished thread %d\n", thread_idx);
-	fflush(stdout);
+	fprintf(stdout, "[*] Finished thread %d, trace limit reached: %d\n", thread_idx, hasReachedTraceLimit[thread_idx]);
 	if (isBuffered)
 		printAllRawTraces(files[thread_idx], (trace_t*) PIN_GetThreadData(tls_key, thread_idx));
-	fprintf(stdout, "[+] Trace for thread #%d saved\n", thread_idx);
-	fflush(stdout);
+	fprintf(stdout, "[*] Trace for thread #%d saved\n", thread_idx);
 }
 
 void Config() {
 	isBuffered = KnobIsBuffered.Value();
 	fprintf(stdout, "[*] Is Buffered? %d\n", isBuffered);
+
+	trace_limit = KnobTraceLimit.Value() > 0 ? KnobTraceLimit.Value()*Mb : TRACE_LIMIT;
+	fprintf(stdout, "[*] Trace limit %dMb\n", trace_limit/Mb);
+
+}
+
+void Usage() {
+	fprintf(stderr, "--- PinCFGReconstructor ---\n");
 }
 
 void Fini(INT32 code, VOID *v) {

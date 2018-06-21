@@ -6,8 +6,8 @@ typedef struct trace_s {
 } trace_t;
 
 #define Kb 1024
-#define Mb 1024*Kb
-#define Gb 1024*Mb
+#define Mb (1024*Kb)
+#define Gb (1024*Mb)
 
 #define INS_DELIMITER '\n'
 #define ADDR_CHARS sizeof(ADDRINT)

@@ -89,15 +89,15 @@ void INS_JumpAnalysis(ADDRINT target_branch, INT32 taken, THREADID thread_idx) {
 
 void Ins(INS ins, void* v) {
 	string disassembled_ins_s = INS_Disassemble(ins);
-	//string disassembled_ins_s = "Hello World!";
 	/* Allocate enough space to save
 	- Disassembled instruction (n bytes)
 	- INS_DELIMITER (1 byte)
 	- 0 terminator (1 byte)
 	*/
 	uint32_t disassembled_ins_len = strlen(disassembled_ins_s.c_str()) + 2;
-	char* disassembled_ins = (char*)calloc(1, sizeof(char) * (disassembled_ins_len));
+	char* disassembled_ins = (char*)malloc(sizeof(char) * (disassembled_ins_len));
 	disassembled_ins[0] = INS_DELIMITER;
+	disassembled_ins[disassembled_ins_len - 1] = '\0';
 	strcpy(disassembled_ins + 1, disassembled_ins_s.c_str());
 	if (isFirstIns) {
 		isFirstIns = false;

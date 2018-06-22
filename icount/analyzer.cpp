@@ -26,14 +26,14 @@ trace_t* traces[THREADS_MAX_NO];
 FILE* files[THREADS_MAX_NO];
 bool hasReachedTraceLimit[THREADS_MAX_NO];
 
-//#define recordInRawTrace(buf, buf_len, trace) do {\
+#define recordInRawTrace(buf, buf_len, trace) {\
 		memcpy(trace->buf + trace->cursor, buf, buf_len);\
 		trace->cursor += buf_len;\
-	} while (0);
-void recordInRawTrace(const char* buf, size_t buf_len, trace_t* trace) {
-	memcpy(trace->buf + trace->cursor, buf, buf_len);
-	trace->cursor += buf_len;
-}
+	}
+//void recordInRawTrace(const char* buf, size_t buf_len, trace_t* trace) {
+//	memcpy(trace->buf + trace->cursor, buf, buf_len);
+//	trace->cursor += buf_len;
+//}
 
 void printAllRawTraces(FILE* f, trace_t* trace) {
 	for (size_t i = 0; i < trace->cursor; i++) {
@@ -41,28 +41,27 @@ void printAllRawTraces(FILE* f, trace_t* trace) {
 	}
 }
 
-void printRawTrace(FILE* f, const char* buf, size_t buf_len) {
-	for (size_t i = 0; i < buf_len; i++) {
-		fputc(buf[i], f);
-	}
-}
+//void printRawTrace(FILE* f, const char* buf, size_t buf_len) {
+//	for (size_t i = 0; i < buf_len; i++) {
+//		fputc(buf[i], f);
+//	}
+//}
 
-void INS_Analysis(char* disassembled_ins, UINT32 disassembled_ins_len, THREADID thread_idx) {
+inline void INS_Analysis(char* buf, UINT32 buf_len, THREADID thread_idx) {
 	trace_t* trace = (trace_t*)PIN_GetThreadData(tls_key, thread_idx);
 	// Trace limit guard
-	if (trace->cursor + disassembled_ins_len >= trace_limit) {
+	if (trace->cursor + buf_len >= trace_limit) {
 		hasReachedTraceLimit[thread_idx] = true;
 		return;
 	}
 
-	if (isBuffered) {
-		recordInRawTrace(disassembled_ins, disassembled_ins_len, trace);
-	}
+	if (isBuffered)
+		recordInRawTrace(buf, buf_len, trace)
 	else
-		printRawTrace(files[thread_idx], disassembled_ins, disassembled_ins_len);
+		printRawTrace(files[thread_idx], buf, buf_len);
 }
 
-void INS_JumpAnalysis(ADDRINT target_branch, INT32 taken, THREADID thread_idx) {
+inline void INS_JumpAnalysis(ADDRINT target_branch, INT32 taken, THREADID thread_idx) {
 	if (!taken) return;
 	trace_t* trace = (trace_t*) PIN_GetThreadData(tls_key, thread_idx);
 	/* Allocate enough space in order to save:
@@ -82,7 +81,7 @@ void INS_JumpAnalysis(ADDRINT target_branch, INT32 taken, THREADID thread_idx) {
 	buf[1] = '@';
 	sprintf(buf + 2, "%x", target_branch);
 	if (isBuffered)
-		recordInRawTrace(buf, buf_len, trace);
+		recordInRawTrace(buf, buf_len, trace)
 	else
 		printRawTrace(files[thread_idx], buf, buf_len);
 }

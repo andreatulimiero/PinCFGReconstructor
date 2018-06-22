@@ -46,6 +46,11 @@ void printAllRawTraces(FILE* f, trace_t* trace) {
 //		fputc(buf[i], f);
 //	}
 //}
+#define printRawTrace(f, buf, buf_len) {\
+	for (size_t i = 0; i < buf_len; i++) {\
+			fputc(buf[i], f);\
+		}\
+	}
 
 inline void INS_Analysis(char* buf, UINT32 buf_len, THREADID thread_idx) {
 	trace_t* trace = (trace_t*)PIN_GetThreadData(tls_key, thread_idx);

@@ -30,10 +30,6 @@ bool hasReachedTraceLimit[THREADS_MAX_NO];
 		memcpy(trace->buf + trace->cursor, buf, buf_len);\
 		trace->cursor += buf_len;\
 	}
-//void recordInRawTrace(const char* buf, size_t buf_len, trace_t* trace) {
-//	memcpy(trace->buf + trace->cursor, buf, buf_len);
-//	trace->cursor += buf_len;
-//}
 
 void printAllRawTraces(FILE* f, trace_t* trace) {
 	for (size_t i = 0; i < trace->cursor; i++) {
@@ -41,15 +37,8 @@ void printAllRawTraces(FILE* f, trace_t* trace) {
 	}
 }
 
-//void printRawTrace(FILE* f, const char* buf, size_t buf_len) {
-//	for (size_t i = 0; i < buf_len; i++) {
-//		fputc(buf[i], f);
-//	}
-//}
 #define printRawTrace(f, buf, buf_len) {\
-	for (size_t i = 0; i < buf_len; i++) {\
-			fputc(buf[i], f);\
-		}\
+	for (size_t i = 0; i < buf_len; i++) { fputc(buf[i], f); }\
 	}
 
 inline void INS_Analysis(char* buf, UINT32 buf_len, THREADID thread_idx) {
@@ -81,9 +70,10 @@ inline void INS_JumpAnalysis(ADDRINT target_branch, INT32 taken, THREADID thread
 		return;
 	}
 
-	char* buf = (char*)calloc(1, sizeof(char) * buf_len);
+	char* buf = (char*)malloc(sizeof(char) * buf_len);
 	buf[0] = '\n';
 	buf[1] = '@';
+	buf[buf_len - 1] = '\0';
 	sprintf(buf + 2, "%x", target_branch);
 	if (isBuffered)
 		recordInRawTrace(buf, buf_len, trace)

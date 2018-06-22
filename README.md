@@ -1,2 +1,2 @@
 # PinCFGReconstructor
-Implementation trade-offs in using Intel Pin for instruction tracing of complex programs
+A simple dynamic CFG Reconstructor written with the help of PIN to analyze the implementatio trade-offs derived from it

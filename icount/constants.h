@@ -1,10 +1,5 @@
 #pragma once
 
-typedef struct trace_s {
-	char* buf;
-	size_t cursor;
-} trace_t;
-
 #define Kb 1024
 #define Mb (1024*Kb)
 #define Gb (1024*Mb)

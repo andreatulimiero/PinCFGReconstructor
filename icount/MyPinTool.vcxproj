@@ -295,6 +295,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="analyzer.cpp" />
+    <ClCompile Include="flusher.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System" />
@@ -304,7 +305,9 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="types.h" />
+    <ClInclude Include="constants.h" />
+    <ClInclude Include="flusher.h" />
+    <ClInclude Include="analyzer.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

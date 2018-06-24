@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "constants.h"
+#include "loggers.h"
 #include "analyzer.h"
 #include "flusher.h"
 
@@ -67,6 +68,7 @@ bool traceLimitGuard(trace_t* trace, size_t buf_len, THREADID thread_idx) {
 	if (!isThreadFlushed) return true;
 	
 	// Trace limit has been reached, and flusher thread option is on
+	INFO("[*] Thread %d is trying to request a flush\n", thread_idx);
 	doub_buf_trace_t* dbt = (doub_buf_trace_t*) trace;
 	dbt_is_flushing:
 	if (dbt->isFlushing) {
@@ -173,8 +175,7 @@ void Ins(INS ins, void* v) {
 }
 
 void ThreadStart(THREADID thread_idx, CONTEXT* ctx, INT32 flags, VOID* v) {
-	fprintf(stdout, "[*] Spawned thread %d\n", thread_idx);
-	fflush(stdout);
+	INFO("[*] Spawned thread %d\n", thread_idx);
 
 	PIN_GetLock(&config_lock, thread_idx);
 	/* Create output file */

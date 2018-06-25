@@ -9,6 +9,7 @@
 static TLS_KEY tls_key = INVALID_TLS_KEY;
 PIN_LOCK config_lock;
 PIN_MUTEX flusher_req_mutex;
+PIN_SEMAPHORE flusher_ready_sem;
 PIN_THREAD_UID flusher_uid;
 
 /** Custom options for our PIN tool **/
@@ -39,20 +40,16 @@ bool hasReachedTraceLimit[THREADS_MAX_NO];
 	}
 
 void waitFlushEnd(doub_buf_trace_t* dbt) {
-	PIN_SemaphoreWait(&flusher::end_flush_sem);
-	dbt->isFlushing = false;
-	dbt->isFlushBufEmpty = true;
-	dbt->flush_buf = NULL;
-	PIN_MutexUnlock(&flusher_req_mutex);
+	INFO("[*]{Thread %d} Waiting for flush to be finished\n");
+	PIN_SemaphoreWait(&dbt->end_flush_sem);
 }
 
 void requestFlush(doub_buf_trace_t* dbt, FILE* f, THREADID thread_idx) {
+	INFO("[*]{Thread %d} Requested a flush\n", thread_idx);
 	flusher::requesting_thread_idx = thread_idx;
-	flusher::buf = dbt->flush_buf;
-	flusher::buf_len = dbt->flush_buf_len;
+	flusher::dbt = dbt;
 	flusher::f = f;
-	dbt->isFlushing = true;
-	PIN_SemaphoreClear(&flusher::end_flush_sem);
+	PIN_SemaphoreClear(&dbt->end_flush_sem);
 	PIN_SemaphoreSet(&flusher::flusher_sem);
 }
 
@@ -63,13 +60,7 @@ bool traceLimitGuard(trace_t* trace, size_t buf_len, THREADID thread_idx) {
 	if (!isThreadFlushed) return true;
 	
 	// Trace limit has been reached, and flusher thread option is on
-	INFO("[*] Thread %d is trying to request a flush\n", thread_idx);
 	doub_buf_trace_t* dbt = (doub_buf_trace_t*) trace;
-	dbt_is_flushing:
-	if (dbt->isFlushing) {
-		INFO("[*] Thread %d finished the main buffer and is waiting for the other to be flushed\n", thread_idx);
-		waitFlushEnd(dbt);
-	} 
 	if (dbt->isFlushBufEmpty) {
 		// Let's switch the buffers
 		dbt->flush_buf = trace->buf;
@@ -77,24 +68,21 @@ bool traceLimitGuard(trace_t* trace, size_t buf_len, THREADID thread_idx) {
 		trace->buf = (char*) malloc(sizeof(char) * trace_limit);
 		trace->cursor = 0;
 		dbt->isFlushBufEmpty = false;
-		// We try to gain the privilege to talk with the semaphore
-		// If the tracer is already on duty we just keep the old trace in a flush_buf pointer
-		// and keep on with the analysis, otherwise we fire the flush
+		/* We try to gain the privilege to talk with the flusher
+		   On success => fire the flush
+		   On fail => keep the old trace in a flush_buf pointer */
 		if (PIN_MutexTryLock(&flusher_req_mutex)) {
 			requestFlush(dbt, files[thread_idx], thread_idx);
-			INFO("[*] Thread %d requested a flush\n", thread_idx);
+		} else {
+			INFO("[*]{Thread %d} prepared for flush, trying next time\n", thread_idx);
 		}
-		return false;
-	} else  if (!dbt->isFlushBufEmpty) {
-		// We have already prepared everything for the flush
-		// and now we must obtain the privilege to talk with the flusher before proceding 
-		// because we have finished the available space
-		INFO("[*] Thread %d finished space, waiting to talk with the flusher\n", thread_idx);
-		PIN_MutexLock(&flusher_req_mutex);
-		requestFlush(dbt, files[thread_idx], thread_idx);
-		// Once fired the flusher we need to wait for it to finish
-		// because we have nothing left for writing
-		goto dbt_is_flushing;
+	} else {
+		if (dbt->isFlushing) {
+			waitFlushEnd(dbt);
+		} else {
+			PIN_MutexLock(&flusher_req_mutex);
+			requestFlush(dbt, files[thread_idx], thread_idx);
+		}
 	}
 	return false;
 }
@@ -187,6 +175,7 @@ void ThreadStart(THREADID thread_idx, CONTEXT* ctx, INT32 flags, VOID* v) {
 		dbt->flush_buf = NULL; // We do not allocate space for this since this pointer will receive the trace's buf
 		dbt->isFlushBufEmpty = true;
 		dbt->isFlushing = false;
+		PIN_SemaphoreInit(&dbt->end_flush_sem);
 		trace = (trace_t*) dbt;
 	} else
 		trace = (trace_t*) malloc(sizeof(trace_t*));
@@ -264,9 +253,11 @@ int main(int argc, char *argv[]) {
 		PIN_ExitProcess(1);
 	}
 
-	/* Prepare Locks and Mutexes */
+	/* Prepare Locks, Mutexes and Semaphores*/
 	PIN_InitLock(&config_lock);
 	PIN_MutexInit(&flusher_req_mutex);
+	PIN_SemaphoreInit(&flusher_ready_sem);
+
 
 	/* Spawn flusher thread if necessary */
 	if (isThreadFlushed)

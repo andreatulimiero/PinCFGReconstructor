@@ -138,17 +138,17 @@ void Ins(INS ins, void* v) {
 		strcpy(disassembled_ins, disassembled_ins + 1);
 	}
 
-	INS_InsertCall(ins, IPOINT_BEFORE,
-		(AFUNPTR)INS_Analysis,
-		IARG_PTR,
-		disassembled_ins,
-		IARG_UINT32,
-		disassembled_ins_len,
-		IARG_THREAD_ID,
-		IARG_END);
-
-
 	if (INS_IsBranchOrCall(ins)) {
+
+		INS_InsertCall(ins, IPOINT_BEFORE,
+			(AFUNPTR) INS_Analysis,
+					   IARG_PTR,
+					   disassembled_ins,
+					   IARG_UINT32,
+					   disassembled_ins_len,
+					   IARG_THREAD_ID,
+					   IARG_END);
+
 		INS_InsertCall(ins, IPOINT_BEFORE,
 			(AFUNPTR)INS_JumpAnalysis,
 			IARG_BRANCH_TARGET_ADDR,

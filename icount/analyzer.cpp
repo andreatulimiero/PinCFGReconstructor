@@ -38,12 +38,6 @@ bool hasReachedTraceLimit[THREADS_MAX_NO];
 		trace->cursor += buf_len;\
 	}
 
-void printAllRawTraces(FILE* f, trace_t* trace) {
-	for (size_t i = 0; i < trace->cursor; i++) {
-		fputc(trace->buf[i], f);
-	}
-}
-
 void waitFlushEnd(doub_buf_trace_t* dbt) {
 	PIN_SemaphoreWait(&flusher::end_flush_sem);
 	dbt->isFlushing = false;
@@ -52,7 +46,8 @@ void waitFlushEnd(doub_buf_trace_t* dbt) {
 	PIN_MutexUnlock(&flusher_req_mutex);
 }
 
-void requestFlush(doub_buf_trace_t* dbt, FILE* f) {
+void requestFlush(doub_buf_trace_t* dbt, FILE* f, THREADID thread_idx) {
+	flusher::requesting_thread_idx = thread_idx;
 	flusher::buf = dbt->flush_buf;
 	flusher::buf_len = dbt->flush_buf_len;
 	flusher::f = f;
@@ -72,8 +67,7 @@ bool traceLimitGuard(trace_t* trace, size_t buf_len, THREADID thread_idx) {
 	doub_buf_trace_t* dbt = (doub_buf_trace_t*) trace;
 	dbt_is_flushing:
 	if (dbt->isFlushing) {
-		// In this case we've already requested a flush but it
-		// may not be finished yet
+		INFO("[*] Thread %d finished the main buffer and is waiting for the other to be flushed\n", thread_idx);
 		waitFlushEnd(dbt);
 	} 
 	if (dbt->isFlushBufEmpty) {
@@ -87,15 +81,17 @@ bool traceLimitGuard(trace_t* trace, size_t buf_len, THREADID thread_idx) {
 		// If the tracer is already on duty we just keep the old trace in a flush_buf pointer
 		// and keep on with the analysis, otherwise we fire the flush
 		if (PIN_MutexTryLock(&flusher_req_mutex)) {
-			requestFlush(dbt, files[thread_idx]);
+			requestFlush(dbt, files[thread_idx], thread_idx);
+			INFO("[*] Thread %d requested a flush\n", thread_idx);
 		}
 		return false;
 	} else  if (!dbt->isFlushBufEmpty) {
 		// We have already prepared everything for the flush
 		// and now we must obtain the privilege to talk with the flusher before proceding 
 		// because we have finished the available space
+		INFO("[*] Thread %d finished space, waiting to talk with the flusher\n", thread_idx);
 		PIN_MutexLock(&flusher_req_mutex);
-		requestFlush(dbt, files[thread_idx]);
+		requestFlush(dbt, files[thread_idx], thread_idx);
 		// Once fired the flusher we need to wait for it to finish
 		// because we have nothing left for writing
 		goto dbt_is_flushing;
@@ -182,8 +178,7 @@ void ThreadStart(THREADID thread_idx, CONTEXT* ctx, INT32 flags, VOID* v) {
 	char filename[TRACE_NAME_LENGTH_LIMIT] = { 0 };
 	sprintf(filename, "trace_%d.out", thread_idx);
 	FILE* out = fopen(filename, "w+");
-	fprintf(stdout, "[+] Created file %s\n", filename);
-	fflush(stdout);
+	INFO("[+] Created file %s\n", filename);
 
 	/* Initialize a raw trace per thread */
 	trace_t* trace;
@@ -191,6 +186,7 @@ void ThreadStart(THREADID thread_idx, CONTEXT* ctx, INT32 flags, VOID* v) {
 		doub_buf_trace_t* dbt = (doub_buf_trace_t*) malloc(sizeof(doub_buf_trace_t));
 		dbt->flush_buf = NULL; // We do not allocate space for this since this pointer will receive the trace's buf
 		dbt->isFlushBufEmpty = true;
+		dbt->isFlushing = false;
 		trace = (trace_t*) dbt;
 	} else
 		trace = (trace_t*) malloc(sizeof(trace_t*));
@@ -200,7 +196,7 @@ void ThreadStart(THREADID thread_idx, CONTEXT* ctx, INT32 flags, VOID* v) {
 
 	traces[thread_idx] = trace;
 	if (PIN_SetThreadData(tls_key, trace, thread_idx) == FALSE) {
-		fprintf(stderr, "[x] PIN_SetThreadData failed");
+		ERROR("[x] PIN_SetThreadData failed\n");
 		PIN_ExitProcess(1);
 	}
 	spawned_threads_no++;
@@ -209,37 +205,38 @@ void ThreadStart(THREADID thread_idx, CONTEXT* ctx, INT32 flags, VOID* v) {
 
 void ThreadFini(THREADID thread_idx, const CONTEXT* ctx, INT32 code, VOID* v) {
 	trace_t* trace = (trace_t*) PIN_GetThreadData(tls_key, thread_idx);
-	fprintf(stdout, "[*] Finished thread %d, trace limit reached: %d\n", thread_idx, hasReachedTraceLimit[thread_idx]);
+	INFO("[*]{Thread %d} Trace limit reached: %d\n", thread_idx, hasReachedTraceLimit[thread_idx]);
 	if (isThreadFlushed) {
 		doub_buf_trace_t* dbt = (doub_buf_trace_t*) trace;
 		if (dbt->isFlushing) {
-			fprintf(stdout, "[*] Flusher still on duty, waiting for it to finish\n");
+			INFO("[*]{Thread %d} Flusher still on duty, waiting for it to finish\n", thread_idx);
 			waitFlushEnd(dbt);
 		}
 		// If there is something else left in the main buf we save it now
 		if (trace->cursor > 0) {
+			INFO("[*]{Thread %d} Flushing the remaining instructions\n", thread_idx);
 			printRawTrace(files[thread_idx], trace->buf, trace->cursor)
 		}
 	} else if (isBuffered)
-		printAllRawTraces(files[thread_idx], trace);
-	fprintf(stdout, "[*] Trace for thread #%d saved\n", thread_idx);
+		printRawTrace(files[thread_idx], trace->buf, trace->cursor)
+	INFO("[*]{Thread %d} Trace saved\n", thread_idx);
 }
 
 void Config() {
 	isBuffered = KnobIsBuffered.Value();
-	fprintf(stdout, "[*] Is Buffered? %d\n", isBuffered);
+	INFO("[*] Is Buffered? %d\n", isBuffered);
 
 	isThreadFlushed = KnobIsThreadFlushed.Value();
 	if (isThreadFlushed) isBuffered = true;
-	fprintf(stdout, "[*] Is Thread flushed? %d\n", isThreadFlushed);
+	INFO("[*] Is Thread flushed? %d\n", isThreadFlushed);
 
 	trace_limit = KnobTraceLimit.Value() > 0 ? KnobTraceLimit.Value()*Mb : TRACE_LIMIT;
-	fprintf(stdout, "[*] Trace limit %dMb\n", trace_limit/Mb);
+	INFO("[*] Trace limit %dMb\n", trace_limit/Mb);
 
 }
 
 void Usage() {
-	fprintf(stderr, "--- PinCFGReconstructor ---\n");
+	ERROR("--- PinCFGReconstructor ---\n");
 }
 
 void Fini(INT32 code, VOID *v) {
@@ -253,7 +250,7 @@ void Fini(INT32 code, VOID *v) {
 int main(int argc, char *argv[]) {
 	/* Init PIN */
 	if (PIN_Init(argc, argv)) {
-		fprintf(stderr, "[x] An error occured while initiating PIN\n");
+		ERROR("[x] An error occured while initiating PIN\n");
 		return 0;
 	}
 
@@ -263,7 +260,7 @@ int main(int argc, char *argv[]) {
 	/* Prepare TLS */
 	tls_key = PIN_CreateThreadDataKey(NULL);
 	if (tls_key == INVALID_TLS_KEY) {
-		fprintf(stderr, "[x] Number of already allocated keys reached the MAX_CLIENT_TLS_KEYS limit\n");
+		ERROR("[x] Number of already allocated keys reached the MAX_CLIENT_TLS_KEYS limit\n");
 		PIN_ExitProcess(1);
 	}
 
@@ -272,7 +269,8 @@ int main(int argc, char *argv[]) {
 	PIN_MutexInit(&flusher_req_mutex);
 
 	/* Spawn flusher thread if necessary */
-	PIN_SpawnInternalThread(flusher::flusherThread, 0, 0, &flusher_uid);
+	if (isThreadFlushed)
+		PIN_SpawnInternalThread(flusher::flusherThread, 0, 0, &flusher_uid);
 
 	prog_name = argv[argc - 1];
 	INS_AddInstrumentFunction(Ins, 0);

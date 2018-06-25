@@ -13,8 +13,6 @@ typedef struct doub_buf_trace_s {
 	bool isFlushing;
 } doub_buf_trace_t;
 
-#define printRawTrace(f, buf, buf_len) {\
-	for (size_t i = 0; i < buf_len; i++) { fputc(buf[i], f); }\
-	}
+#define printRawTrace(f, buf, buf_len) { fwrite(buf, sizeof(char), buf_len, f); }
 
 extern size_t spawned_threads_no;

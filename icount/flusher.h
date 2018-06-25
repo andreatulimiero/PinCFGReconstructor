@@ -3,6 +3,7 @@
 namespace flusher {
 void flusherThread(void* arg);
 
+extern THREADID requesting_thread_idx;
 extern char* buf;
 extern size_t buf_len;
 extern FILE* f;

@@ -39,8 +39,8 @@ bool hasReachedTraceLimit[THREADS_MAX_NO];
 		trace->cursor += buf_len;\
 	}
 
-void waitFlushEnd(doub_buf_trace_t* dbt) {
-	INFO("[*]{Thread %d} Waiting for flush to be finished\n");
+void waitFlushEnd(doub_buf_trace_t* dbt, THREADID thread_idx) {
+	INFO("[*]{Thread %d} Waiting for flush to be finished\n", thread_idx);
 	PIN_SemaphoreWait(&dbt->end_flush_sem);
 }
 
@@ -78,7 +78,7 @@ bool traceLimitGuard(trace_t* trace, size_t buf_len, THREADID thread_idx) {
 		}
 	} else {
 		if (dbt->isFlushing) {
-			waitFlushEnd(dbt);
+			waitFlushEnd(dbt, thread_idx);
 		} else {
 			PIN_MutexLock(&flusher_req_mutex);
 			requestFlush(dbt, files[thread_idx], thread_idx);
@@ -194,12 +194,12 @@ void ThreadStart(THREADID thread_idx, CONTEXT* ctx, INT32 flags, VOID* v) {
 
 void ThreadFini(THREADID thread_idx, const CONTEXT* ctx, INT32 code, VOID* v) {
 	trace_t* trace = (trace_t*) PIN_GetThreadData(tls_key, thread_idx);
-	INFO("[*]{Thread %d} Trace limit reached: %d\n", thread_idx, hasReachedTraceLimit[thread_idx]);
+	INFO("[*]{Thread %d} Ended, trace limit reached: %d\n", thread_idx, hasReachedTraceLimit[thread_idx]);
 	if (isThreadFlushed) {
 		doub_buf_trace_t* dbt = (doub_buf_trace_t*) trace;
 		if (dbt->isFlushing) {
 			INFO("[*]{Thread %d} Flusher still on duty, waiting for it to finish\n", thread_idx);
-			waitFlushEnd(dbt);
+			waitFlushEnd(dbt, thread_idx);
 		}
 		// If there is something else left in the main buf we save it now
 		if (trace->cursor > 0) {
@@ -226,6 +226,14 @@ void Config() {
 
 void Usage() {
 	ERROR("--- PinCFGReconstructor ---\n");
+}
+
+void PrepareForFini(void* v) {
+	INFO("[*] Waiting for flusher to terminate\n");
+	flusher::isPoisoned = true;
+	PIN_SemaphoreSet(&flusher::flusher_sem);
+	PIN_WaitForThreadTermination(flusher_uid, PIN_INFINITE_TIMEOUT, NULL);
+	DEBUG("Flusher terminated\n");
 }
 
 void Fini(INT32 code, VOID *v) {
@@ -269,7 +277,9 @@ int main(int argc, char *argv[]) {
 	PIN_AddThreadStartFunction(ThreadStart, 0);
 	PIN_AddThreadFiniFunction(ThreadFini, 0);
 
+	PIN_AddPrepareForFiniFunction(PrepareForFini, 0);
 	PIN_AddFiniFunction(Fini, 0);
+
 	PIN_StartProgram();
 	return 0;
 }

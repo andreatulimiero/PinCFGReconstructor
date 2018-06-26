@@ -19,11 +19,14 @@ KNOB <BOOL> KnobIsThreadFlushed(KNOB_MODE_WRITEONCE, "pintool",
 						   "thread_flushed", "false", "whether or not the trace has a thread for flushing");
 KNOB <size_t> KnobTraceLimit(KNOB_MODE_WRITEONCE, "pintool",
 	"trace_limit", "0", "size of the trace limit");
+KNOB <size_t> KnobThreadBufferSize(KNOB_MODE_WRITEONCE, "pintool",
+							 "thread_buffer_size", "0", "size of the per-thread buffer");
 
 short unsigned int once;
 bool isBuffered;
 bool isThreadFlushed;
 size_t trace_limit;
+size_t thread_buffer_size;
 
 size_t spawned_threads_no;
 bool isFirstIns = true;
@@ -56,12 +59,18 @@ void requestFlush(doub_buf_trace_t* dbt, FILE* f, THREADID thread_idx) {
 
 /* Here a request to the flusher might be carried out */
 bool traceLimitGuard(trace_t* trace, size_t buf_len, THREADID thread_idx) {
-	if (trace->cursor + buf_len <= trace_limit) return false;
-	else hasReachedTraceLimit[thread_idx] = true;
+	// If we reached the trace limit let's stop tracing
+	if (trace->cursor + buf_len > trace_limit) {
+		hasReachedTraceLimit[thread_idx] = true;
+		return true;
+	}
+	// If we are in buffered of flushed mode no action is required
+	if (!isThreadFlushed) return false;
 
-	if (!isThreadFlushed) return true;
+	// If we have not reached the main buffer maximum size no action is required
+	if (trace->cursor + buf_len <= thread_buffer_size) return false;
 
-	// Trace limit has been reached, and flusher thread option is on
+	// Thread buffer limit has been reached, and flusher thread option is on
 	doub_buf_trace_t* dbt = (doub_buf_trace_t*) trace;
 	if (dbt->isFlushBufEmpty) {
 		// Let's switch the buffers
@@ -79,6 +88,9 @@ bool traceLimitGuard(trace_t* trace, size_t buf_len, THREADID thread_idx) {
 			INFO("[*]{Thread %d} prepared for flush, trying next time\n", thread_idx);
 		}
 	} else {
+		/* We need space to keep on writing
+			Already asked a flush => wait for the flusher to end the flush
+			Not asked a flush yet => wait to gain privilege to ask for it */
 		if (dbt->isFlushing) {
 			waitFlushEnd(dbt, thread_idx);
 		} else {
@@ -185,9 +197,11 @@ void ThreadStart(THREADID thread_idx, CONTEXT* ctx, INT32 flags, VOID* v) {
 		dbt->isFlushing = false;
 		PIN_SemaphoreInit(&dbt->end_flush_sem);
 		trace = (trace_t*) dbt;
-	} else
+		trace->buf = (char*) malloc(sizeof(char) * thread_buffer_size);
+	} else {
 		trace = (trace_t*) malloc(sizeof(trace_t*));
-	trace->buf = (char*) malloc(sizeof(char) * trace_limit);
+		trace->buf = (char*) malloc(sizeof(char) * trace_limit);
+	}
 	trace->cursor = 0;
 	files[thread_idx] = out;
 
@@ -228,7 +242,10 @@ void Config() {
 	INFO("[*] Is Thread flushed? %d\n", isThreadFlushed);
 
 	trace_limit = KnobTraceLimit.Value() > 0 ? KnobTraceLimit.Value()*Mb : TRACE_LIMIT;
-	INFO("[*] Trace limit %dMb\n", trace_limit/Mb);
+	INFO("[*] Trace limit: %dMb\n", trace_limit/Mb);
+
+	thread_buffer_size = KnobThreadBufferSize.Value() > 0 ? KnobTraceLimit.Value()*Mb : THREAD_BUFFER_SIZE;
+	INFO("[*] Thread buffer size: %dMb\n", thread_buffer_size/Mb);
 
 }
 
@@ -238,9 +255,11 @@ void Usage() {
 
 void PrepareForFini(void* v) {
 	INFO("[*] Waiting for flusher to terminate\n");
-	flusher::isPoisoned = true;
-	PIN_SemaphoreSet(&flusher::flusher_sem);
-	PIN_WaitForThreadTermination(flusher_uid, PIN_INFINITE_TIMEOUT, NULL);
+	if (isThreadFlushed) {
+		flusher::isPoisoned = true;
+		PIN_SemaphoreSet(&flusher::flusher_sem);
+		PIN_WaitForThreadTermination(flusher_uid, PIN_INFINITE_TIMEOUT, NULL);
+	}
 }
 
 void Fini(INT32 code, VOID *v) {

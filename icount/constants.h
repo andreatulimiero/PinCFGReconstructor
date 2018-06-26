@@ -4,6 +4,8 @@
 #define Mb (1024*Kb)
 #define Gb (1024*Mb)
 
+#define CACHE_LINE_SIZE 64
+
 #define INS_DELIMITER '\n'
 #define ADDR_CHARS sizeof(ADDRINT)
 

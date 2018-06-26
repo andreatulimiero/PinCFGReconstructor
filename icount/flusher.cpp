@@ -6,6 +6,7 @@
 #include "analyzer.h"
 
 namespace flusher {
+PIN_SEMAPHORE flusher_ready_sem;
 PIN_SEMAPHORE flusher_sem;
 THREADID requesting_thread_idx = -1;
 doub_buf_trace_t* dbt;
@@ -13,9 +14,7 @@ FILE* f;
 bool isPoisoned;
 
 void flusherThread(void* arg) {
-	PIN_SemaphoreInit(&flusher_sem);
-	PIN_SemaphoreSet(&flusher_ready_sem);
-	INFO("[*]{Flusher} Setup completed\n");
+	INFO("[*]{Flusher} Started\n");
 	while (1) {
 		PIN_SemaphoreWait(&flusher_sem);
 		if (isPoisoned) return;

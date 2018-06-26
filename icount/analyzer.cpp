@@ -41,6 +41,7 @@ bool hasReachedTraceLimit[THREADS_MAX_NO];
 #define recordTraceInMemory(buf, buf_len, trace) {\
 		memcpy(trace->buf + trace->cursor, buf, buf_len);\
 		trace->cursor += buf_len;\
+		trace->size += buf_len;\
 	}
 
 void waitFlushEnd(doub_buf_trace_t* dbt, THREADID thread_idx) {
@@ -60,42 +61,48 @@ void requestFlush(doub_buf_trace_t* dbt, FILE* f, THREADID thread_idx) {
 /* Here a request to the flusher might be carried out */
 bool traceLimitGuard(trace_t* trace, size_t buf_len, THREADID thread_idx) {
 	// If we reached the trace limit let's stop tracing
-	if (trace->cursor + buf_len > trace_limit) {
+	if (trace->size + buf_len > trace_limit) {
 		hasReachedTraceLimit[thread_idx] = true;
 		return true;
 	}
-	// If we are in buffered of flushed mode no action is required
-	if (!isThreadFlushed) return false;
+	// If we are in flushed mode no action is required
+	if (!isBuffered) return false;
 
 	// If we have not reached the main buffer maximum size no action is required
 	if (trace->cursor + buf_len <= thread_buffer_size) return false;
 
-	// Thread buffer limit has been reached, and flusher thread option is on
-	doub_buf_trace_t* dbt = (doub_buf_trace_t*) trace;
-	if (dbt->isFlushBufEmpty) {
-		// Let's switch the buffers
-		dbt->flush_buf = trace->buf;
-		dbt->flush_buf_len = trace->cursor;
-		trace->buf = (char*) malloc(sizeof(char) * trace_limit);
+	if (!isThreadFlushed) {
+		INFO("[*] Thread buffer limit reached, flushing\n");
+		flushTraceToFile(files[thread_idx], trace->buf, trace->cursor);
 		trace->cursor = 0;
-		dbt->isFlushBufEmpty = false;
-		/* We try to gain the privilege to talk with the flusher
-		   On success => fire the flush
-		   On fail => move trace in a flush_buf pointer and try again later*/
-		if (PIN_MutexTryLock(&flusher_req_mutex)) {
-			requestFlush(dbt, files[thread_idx], thread_idx);
-		} else {
-			INFO("[*]{Thread %d} prepared for flush, trying next time\n", thread_idx);
-		}
 	} else {
-		/* We need space to keep on writing
+		// Thread buffer limit has been reached, and flusher thread option is on
+		doub_buf_trace_t* dbt = (doub_buf_trace_t*) trace;
+		if (dbt->isFlushBufEmpty) {
+			// Let's switch the buffers
+			dbt->flush_buf = trace->buf;
+			dbt->flush_buf_len = trace->cursor;
+			trace->buf = (char*) malloc(sizeof(char) * trace_limit);
+			trace->cursor = 0;
+			dbt->isFlushBufEmpty = false;
+			/* We try to gain the privilege to talk with the flusher
+			On success => fire the flush
+			On fail => move trace in a flush_buf pointer and try again later*/
+			if (PIN_MutexTryLock(&flusher_req_mutex)) {
+				requestFlush(dbt, files[thread_idx], thread_idx);
+			} else {
+				INFO("[*]{Thread %d} prepared for flush, trying next time\n", thread_idx);
+			}
+		} else {
+			/* We need space to keep on writing
 			Already asked a flush => wait for the flusher to end the flush
 			Not asked a flush yet => wait to gain privilege to ask for it */
-		if (dbt->isFlushing) {
-			waitFlushEnd(dbt, thread_idx);
-		} else {
-			PIN_MutexLock(&flusher_req_mutex);
-			requestFlush(dbt, files[thread_idx], thread_idx);
+			if (dbt->isFlushing) {
+				waitFlushEnd(dbt, thread_idx);
+			} else {
+				PIN_MutexLock(&flusher_req_mutex);
+				requestFlush(dbt, files[thread_idx], thread_idx);
+			}
 		}
 	}
 	return false;
@@ -197,12 +204,12 @@ void ThreadStart(THREADID thread_idx, CONTEXT* ctx, INT32 flags, VOID* v) {
 		dbt->isFlushing = false;
 		PIN_SemaphoreInit(&dbt->end_flush_sem);
 		trace = (trace_t*) dbt;
-		trace->buf = (char*) malloc(sizeof(char) * thread_buffer_size);
-	} else {
+	} else
 		trace = (trace_t*) malloc(sizeof(trace_t*));
-		trace->buf = (char*) malloc(sizeof(char) * trace_limit);
-	}
+
+	trace->buf = (char*) malloc(sizeof(char) * thread_buffer_size);
 	trace->cursor = 0;
+	trace->size = 0;
 	files[thread_idx] = out;
 
 	traces[thread_idx] = trace;
@@ -244,7 +251,7 @@ void Config() {
 	trace_limit = KnobTraceLimit.Value() > 0 ? KnobTraceLimit.Value()*Mb : TRACE_LIMIT;
 	INFO("[*] Trace limit: %dMb\n", trace_limit/Mb);
 
-	thread_buffer_size = KnobThreadBufferSize.Value() > 0 ? KnobTraceLimit.Value()*Mb : THREAD_BUFFER_SIZE;
+	thread_buffer_size = KnobThreadBufferSize.Value() > 0 ? KnobThreadBufferSize.Value()*Mb : THREAD_BUFFER_SIZE;
 	INFO("[*] Thread buffer size: %dMb\n", thread_buffer_size/Mb);
 
 }
@@ -254,8 +261,8 @@ void Usage() {
 }
 
 void PrepareForFini(void* v) {
-	INFO("[*] Waiting for flusher to terminate\n");
 	if (isThreadFlushed) {
+		INFO("[*] Waiting for flusher to terminate\n");
 		flusher::isPoisoned = true;
 		PIN_SemaphoreSet(&flusher::flusher_sem);
 		PIN_WaitForThreadTermination(flusher_uid, PIN_INFINITE_TIMEOUT, NULL);
@@ -291,6 +298,9 @@ int main(int argc, char *argv[]) {
 	PIN_InitLock(&config_lock);
 	PIN_MutexInit(&flusher_req_mutex);
 	PIN_SemaphoreInit(&flusher_ready_sem);
+	// Flusher
+	PIN_SemaphoreInit(&flusher::flusher_sem);
+	PIN_SemaphoreSet(&flusher::flusher_ready_sem);
 
 
 	/* Spawn flusher thread if necessary */

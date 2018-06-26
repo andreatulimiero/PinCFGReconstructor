@@ -6,7 +6,7 @@
 typedef struct trace_s {
 	size_t cursor;
 	char* buf;
-	//uint8_t _pad[TRACE_PADDING];
+	uint8_t _pad[TRACE_PADDING];
 } trace_t;
 
 typedef struct doub_buf_trace_s {

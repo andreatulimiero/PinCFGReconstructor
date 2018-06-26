@@ -211,6 +211,10 @@ void ThreadStart(THREADID thread_idx, CONTEXT* ctx, INT32 flags, VOID* v) {
 		trace = (trace_t*) malloc(sizeof(trace_t*));
 
 	trace->buf = (char*) malloc(sizeof(char) * thread_buffer_size);
+	if (trace->buf == NULL) {
+		ERROR("[x] Not enough space to allocate the buffer\n");
+		PIN_ExitApplication(1);
+	}
 	trace->cursor = 0;
 	files[thread_idx] = out;
 
@@ -260,6 +264,7 @@ void Config() {
 
 void Usage() {
 	ERROR("--- PinCFGReconstructor ---\n");
+	ERROR((KNOB_BASE::StringKnobSummary() + "\n").c_str());
 }
 
 void PrepareForFini(void* v) {
@@ -282,7 +287,7 @@ void Fini(INT32 code, VOID *v) {
 int main(int argc, char *argv[]) {
 	/* Init PIN */
 	if (PIN_Init(argc, argv)) {
-		ERROR("[x] An error occured while initiating PIN\n");
+		Usage();
 		return 0;
 	}
 

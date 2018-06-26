@@ -1,1 +1,5 @@
-﻿
+﻿  analyzer.cpp
+  flusher.cpp
+  Generating Code...
+     Creating library C:\Pin35\icount32.lib and object C:\Pin35\icount32.exp
+  MyPinTool.vcxproj -> C:\Pin35\icount32.dll

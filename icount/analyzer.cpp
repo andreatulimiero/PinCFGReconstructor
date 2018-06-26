@@ -29,6 +29,7 @@ size_t trace_limit;
 size_t thread_buffer_size;
 
 size_t spawned_threads_no;
+size_t trace_size;
 bool isFirstIns = true;
 const char* prog_name;
 
@@ -41,8 +42,10 @@ bool hasReachedTraceLimit[THREADS_MAX_NO];
 #define recordTraceInMemory(buf, buf_len, trace) {\
 		memcpy(trace->buf + trace->cursor, buf, buf_len);\
 		trace->cursor += buf_len;\
-		trace->size += buf_len;\
+		trace_size += buf_len;\
 	}
+
+#define recordTraceToFile(f, buf, buf_len, trace) { fwrite(buf, sizeof(char), buf_len, f); trace_size += buf_len; }
 
 void waitFlushEnd(doub_buf_trace_t* dbt, THREADID thread_idx) {
 	INFO("[*]{Thread %d} Waiting for flush to be finished\n", thread_idx);
@@ -61,7 +64,7 @@ void requestFlush(doub_buf_trace_t* dbt, FILE* f, THREADID thread_idx) {
 /* Here a request to the flusher might be carried out */
 bool traceLimitGuard(trace_t* trace, size_t buf_len, THREADID thread_idx) {
 	// If we reached the trace limit let's stop tracing
-	if (trace->size + buf_len > trace_limit) {
+	if (trace_size + buf_len > trace_limit) {
 		hasReachedTraceLimit[thread_idx] = true;
 		return true;
 	}
@@ -209,7 +212,6 @@ void ThreadStart(THREADID thread_idx, CONTEXT* ctx, INT32 flags, VOID* v) {
 
 	trace->buf = (char*) malloc(sizeof(char) * thread_buffer_size);
 	trace->cursor = 0;
-	trace->size = 0;
 	files[thread_idx] = out;
 
 	traces[thread_idx] = trace;

@@ -1,12 +1,11 @@
 #pragma once
 #include "constants.h"
 
-#define TRACE_PADDING CACHE_LINE_SIZE - 12
+#define TRACE_PADDING CACHE_LINE_SIZE - 8
 
 typedef struct trace_s {
-	char* buf;
 	size_t cursor;
-	size_t size;
+	char* buf;
 	uint8_t _pad[TRACE_PADDING];
 } trace_t;
 
@@ -20,7 +19,6 @@ typedef struct doub_buf_trace_s {
 } doub_buf_trace_t;
 
 #define flushTraceToFile(f, buf, buf_len) { fwrite(buf, sizeof(char), buf_len, f); }
-#define recordTraceToFile(f, buf, buf_len, trace) { fwrite(buf, sizeof(char), buf_len, f); trace->size += buf_len; }
 
 extern size_t spawned_threads_no;
 extern PIN_MUTEX flusher_req_mutex;

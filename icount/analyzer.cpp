@@ -20,6 +20,7 @@ KNOB <BOOL> KnobIsThreadFlushed(KNOB_MODE_WRITEONCE, "pintool",
 KNOB <size_t> KnobTraceLimit(KNOB_MODE_WRITEONCE, "pintool",
 	"trace_limit", "0", "size of the trace limit");
 
+short unsigned int once;
 bool isBuffered;
 bool isThreadFlushed;
 size_t trace_limit;
@@ -34,7 +35,7 @@ trace_t* traces[THREADS_MAX_NO];
 FILE* files[THREADS_MAX_NO];
 bool hasReachedTraceLimit[THREADS_MAX_NO];
 
-#define recordInRawTrace(buf, buf_len, trace) {\
+#define recordTraceInMemory(buf, buf_len, trace) {\
 		memcpy(trace->buf + trace->cursor, buf, buf_len);\
 		trace->cursor += buf_len;\
 	}
@@ -56,9 +57,10 @@ void requestFlush(doub_buf_trace_t* dbt, FILE* f, THREADID thread_idx) {
 /* Here a request to the flusher might be carried out */
 bool traceLimitGuard(trace_t* trace, size_t buf_len, THREADID thread_idx) {
 	if (trace->cursor + buf_len <= trace_limit) return false;
-	hasReachedTraceLimit[thread_idx] = true;
+	else hasReachedTraceLimit[thread_idx] = true;
+
 	if (!isThreadFlushed) return true;
-	
+
 	// Trace limit has been reached, and flusher thread option is on
 	doub_buf_trace_t* dbt = (doub_buf_trace_t*) trace;
 	if (dbt->isFlushBufEmpty) {
@@ -70,7 +72,7 @@ bool traceLimitGuard(trace_t* trace, size_t buf_len, THREADID thread_idx) {
 		dbt->isFlushBufEmpty = false;
 		/* We try to gain the privilege to talk with the flusher
 		   On success => fire the flush
-		   On fail => keep the old trace in a flush_buf pointer */
+		   On fail => move trace in a flush_buf pointer and try again later*/
 		if (PIN_MutexTryLock(&flusher_req_mutex)) {
 			requestFlush(dbt, files[thread_idx], thread_idx);
 		} else {
@@ -93,9 +95,9 @@ inline void INS_Analysis(char* buf, UINT32 buf_len, THREADID thread_idx) {
 	if (traceLimitGuard(trace, buf_len, thread_idx)) return;
 
 	if (isBuffered)
-		recordInRawTrace(buf, buf_len, trace)
+		recordTraceInMemory(buf, buf_len, trace)
 	else
-		printRawTrace(files[thread_idx], buf, buf_len);
+		recordTraceToFile(files[thread_idx], buf, buf_len, trace);
 }
 
 inline void INS_JumpAnalysis(ADDRINT target_branch, INT32 taken, THREADID thread_idx) {
@@ -115,10 +117,11 @@ inline void INS_JumpAnalysis(ADDRINT target_branch, INT32 taken, THREADID thread
 	buf[1] = '@';
 	buf[buf_len - 1] = '\0';
 	sprintf(buf + 2, "%x", target_branch);
+
 	if (isBuffered)
-		recordInRawTrace(buf, buf_len, trace)
+		recordTraceInMemory(buf, buf_len, trace)
 	else
-		printRawTrace(files[thread_idx], buf, buf_len);
+		recordTraceToFile(files[thread_idx], buf, buf_len, trace);
 }
 
 void Ins(INS ins, void* v) {
@@ -156,6 +159,11 @@ void Ins(INS ins, void* v) {
 			IARG_THREAD_ID,
 			IARG_END);
 	}
+}
+
+void Img(IMG img, void* v) {
+	if (strstr(IMG_Name(img).c_str(), prog_name))
+		INFO("[+] Image %s loaded at %x\n", IMG_Name(img).c_str(), IMG_StartAddress(img));
 }
 
 void ThreadStart(THREADID thread_idx, CONTEXT* ctx, INT32 flags, VOID* v) {
@@ -204,10 +212,10 @@ void ThreadFini(THREADID thread_idx, const CONTEXT* ctx, INT32 code, VOID* v) {
 		// If there is something else left in the main buf we save it now
 		if (trace->cursor > 0) {
 			INFO("[*]{Thread %d} Flushing the remaining instructions\n", thread_idx);
-			printRawTrace(files[thread_idx], trace->buf, trace->cursor)
+			flushTraceToFile(files[thread_idx], trace->buf, trace->cursor)
 		}
 	} else if (isBuffered)
-		printRawTrace(files[thread_idx], trace->buf, trace->cursor)
+		flushTraceToFile(files[thread_idx], trace->buf, trace->cursor)
 	INFO("[*]{Thread %d} Trace saved\n", thread_idx);
 }
 
@@ -233,7 +241,6 @@ void PrepareForFini(void* v) {
 	flusher::isPoisoned = true;
 	PIN_SemaphoreSet(&flusher::flusher_sem);
 	PIN_WaitForThreadTermination(flusher_uid, PIN_INFINITE_TIMEOUT, NULL);
-	DEBUG("Flusher terminated\n");
 }
 
 void Fini(INT32 code, VOID *v) {
@@ -273,6 +280,7 @@ int main(int argc, char *argv[]) {
 
 	prog_name = argv[argc - 1];
 	INS_AddInstrumentFunction(Ins, 0);
+	IMG_AddInstrumentFunction(Img, 0);
 
 	PIN_AddThreadStartFunction(ThreadStart, 0);
 	PIN_AddThreadFiniFunction(ThreadFini, 0);

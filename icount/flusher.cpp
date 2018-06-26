@@ -21,7 +21,7 @@ void flusherThread(void* arg) {
 		if (isPoisoned) return;
 		INFO("[*]{Flusher} Received request from thread %d, flushing ...\n", requesting_thread_idx);
 		dbt->isFlushing = true;
-		printRawTrace(f, dbt->flush_buf, dbt->flush_buf_len);
+		flushTraceToFile(f, dbt->flush_buf, dbt->flush_buf_len);
 		free(dbt->flush_buf);
 		//INFO("[*]{Flusher} Finished writing for thread %d\n", requesting_thread_idx);
 		dbt->isFlushing = false;

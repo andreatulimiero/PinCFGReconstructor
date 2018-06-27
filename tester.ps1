@@ -1,4 +1,4 @@
-$TESTS_NUM = 5
+$TESTS_NUM = 3
 
 function clear_env() {
     Invoke-Expression "rm trace*"
@@ -23,7 +23,7 @@ function runTests ($tag, $cmd) {
 }
 
 Write-Host "--- Beginning Tests for driverquery /v ---"
-$PROG = "driverquery /v"
+$PROG = "C:\Users\tulim\Downloads\fciv.exe -md5 -sha1 C:\Users\tulim\Downloads\xubuntu-18.04-desktop-amd64.iso"
 $BASE = "C:\Pin35\pin.exe -t C:\Pin35\icount32.dll -trace_limit 2048"
 
 runTests "Original" "$PROG"

@@ -73,7 +73,7 @@ bool traceLimitGuard(trace_t* trace, size_t buf_len, THREADID thread_idx) {
 	if (!isBuffered) return false;
 
 	// If we have not reached the main buffer maximum size no action is required
-	if (trace->cursor + buf_len <= thread_buffer_size) return false;
+	if (trace->cursor + buf_len <= trace->buf_size) return false;
 
 	if (!isThreadFlushed) {
 		INFO("[*] Thread buffer limit reached, flushing\n");
@@ -86,7 +86,7 @@ bool traceLimitGuard(trace_t* trace, size_t buf_len, THREADID thread_idx) {
 			// Let's switch the buffers
 			dbt->flush_buf = trace->buf;
 			dbt->flush_buf_len = trace->cursor;
-			trace->buf = (char*) malloc(sizeof(char) * thread_buffer_size);
+			trace->buf = (char*) malloc(sizeof(char) * trace->buf_size);
 			MALLOC_ERROR_HANDLER(trace->buf, "[x] Not enough space to allocare another buffer for the trace\n");
 			trace->cursor = 0;
 			dbt->isFlushBufEmpty = false;
@@ -214,7 +214,8 @@ void ThreadStart(THREADID thread_idx, CONTEXT* ctx, INT32 flags, VOID* v) {
 	} else
 		trace = (trace_t*) malloc(sizeof(trace_t*));
 
-	trace->buf = (char*) malloc(sizeof(char) * thread_buffer_size);
+	trace->buf_size = thread_buffer_size;
+	trace->buf = (char*) malloc(sizeof(char) * trace->buf_size);
 	MALLOC_ERROR_HANDLER(trace->buf, "[x] Not enough space to allocate the buffer\n");
 	trace->cursor = 0;
 	files[thread_idx] = out;
@@ -324,6 +325,9 @@ int main(int argc, char *argv[]) {
 
 	PIN_AddPrepareForFiniFunction(PrepareForFini, 0);
 	PIN_AddFiniFunction(Fini, 0);
+
+	INFO("[*] trace_t size: %d\n", sizeof(trace_t));
+	INFO("[*] doub_buf_trace_t size: %d\n", sizeof(doub_buf_trace_t));
 
 	PIN_StartProgram();
 	return 0;

@@ -1,12 +1,13 @@
 #pragma once
 #include "constants.h"
 
-#define TRACE_PADDING CACHE_LINE_SIZE - 8
+#define TRACE_PADDING CACHE_LINE_SIZE - 12
 
 typedef struct trace_s {
 	size_t cursor;
 	char* buf;
 	uint8_t _pad[TRACE_PADDING];
+	size_t buf_size;
 } trace_t;
 
 typedef struct doub_buf_trace_s {

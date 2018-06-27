@@ -306,6 +306,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="constants.h" />
+    <ClInclude Include="error_handlers.h" />
     <ClInclude Include="flusher.h" />
     <ClInclude Include="analyzer.h" />
     <ClInclude Include="loggers.h" />

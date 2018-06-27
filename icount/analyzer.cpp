@@ -3,6 +3,7 @@
 #include <string.h>
 #include "constants.h"
 #include "loggers.h"
+#include "error_handlers.h"
 #include "analyzer.h"
 #include "flusher.h"
 
@@ -85,7 +86,8 @@ bool traceLimitGuard(trace_t* trace, size_t buf_len, THREADID thread_idx) {
 			// Let's switch the buffers
 			dbt->flush_buf = trace->buf;
 			dbt->flush_buf_len = trace->cursor;
-			trace->buf = (char*) malloc(sizeof(char) * trace_limit);
+			trace->buf = (char*) malloc(sizeof(char) * thread_buffer_size);
+			MALLOC_ERROR_HANDLER(trace->buf, "[x] Not enough space to allocare another buffer for the trace\n");
 			trace->cursor = 0;
 			dbt->isFlushBufEmpty = false;
 			/* We try to gain the privilege to talk with the flusher
@@ -135,6 +137,7 @@ inline void INS_JumpAnalysis(ADDRINT target_branch, INT32 taken, THREADID thread
 	if (traceLimitGuard(trace, buf_len, thread_idx)) return;
 
 	char* buf = (char*)malloc(sizeof(char) * buf_len);
+	MALLOC_ERROR_HANDLER(buf, "[x] Not enough space to allocate the buf for the INS_JumpAnalysis\n");
 	buf[0] = '\n';
 	buf[1] = '@';
 	buf[buf_len - 1] = '\0';
@@ -155,6 +158,7 @@ void Ins(INS ins, void* v) {
 	*/
 	uint32_t disassembled_ins_len = strlen(disassembled_ins_s.c_str()) + 2;
 	char* disassembled_ins = (char*)malloc(sizeof(char) * (disassembled_ins_len));
+	MALLOC_ERROR_HANDLER(disassembled_ins, "[x] Not enough space to allocate disassembled_ins\n");
 	disassembled_ins[0] = INS_DELIMITER;
 	disassembled_ins[disassembled_ins_len - 1] = '\0';
 	strcpy(disassembled_ins + 1, disassembled_ins_s.c_str());
@@ -211,10 +215,7 @@ void ThreadStart(THREADID thread_idx, CONTEXT* ctx, INT32 flags, VOID* v) {
 		trace = (trace_t*) malloc(sizeof(trace_t*));
 
 	trace->buf = (char*) malloc(sizeof(char) * thread_buffer_size);
-	if (trace->buf == NULL) {
-		ERROR("[x] Not enough space to allocate the buffer\n");
-		PIN_ExitApplication(1);
-	}
+	MALLOC_ERROR_HANDLER(trace->buf, "[x] Not enough space to allocate the buffer\n");
 	trace->cursor = 0;
 	files[thread_idx] = out;
 

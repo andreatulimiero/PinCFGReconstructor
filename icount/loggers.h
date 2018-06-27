@@ -1,7 +1,7 @@
 #pragma once
 
-#define INFO_LEVEL 1
-#define DEBUG_LEVEL 1
+#define INFO_LEVEL 0
+#define DEBUG_LEVEL 0
 
 #if INFO_LEVEL
 	#define INFO(format, ...) { fprintf(stdout, format, __VA_ARGS__); }
@@ -16,3 +16,5 @@
 #endif
 
 #define ERROR(format, ...) { fprintf(stderr, format, __VA_ARGS__); }
+
+#define REPORT(format, ...) { fprintf(stdout, format, __VA_ARGS__); } 

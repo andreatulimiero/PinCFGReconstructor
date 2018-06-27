@@ -1,6 +1,7 @@
-#include "pin.H"
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
+#include "pin.H"
 #include "constants.h"
 #include "loggers.h"
 #include "error_handlers.h"
@@ -22,10 +23,14 @@ KNOB <size_t> KnobTraceLimit(KNOB_MODE_WRITEONCE, "pintool",
 	"trace_limit", "0", "size of the trace limit");
 KNOB <size_t> KnobThreadBufferSize(KNOB_MODE_WRITEONCE, "pintool",
 							 "thread_buffer_size", "0", "size of the per-thread buffer");
+KNOB <BOOL> KnobFavorMainThread(KNOB_MODE_WRITEONCE, "pintool",
+								"favor_main_thread", "false", "allocate a quarter of thread buffer for thread that are not 0");
 
-short unsigned int once;
+time_t tv;
+
 bool isBuffered;
 bool isThreadFlushed;
+bool isMainThreadFavored;
 size_t trace_limit;
 size_t thread_buffer_size;
 
@@ -33,8 +38,6 @@ size_t spawned_threads_no;
 size_t trace_size;
 bool isFirstIns = true;
 const char* prog_name;
-
-short unsigned int hasDone = 0;
 
 trace_t* traces[THREADS_MAX_NO];
 FILE* files[THREADS_MAX_NO];
@@ -214,7 +217,12 @@ void ThreadStart(THREADID thread_idx, CONTEXT* ctx, INT32 flags, VOID* v) {
 	} else
 		trace = (trace_t*) malloc(sizeof(trace_t*));
 
-	trace->buf_size = thread_buffer_size;
+	if (isMainThreadFavored) {
+		if (thread_idx == 0)	trace->buf_size = thread_buffer_size;
+		else					trace->buf_size = thread_buffer_size/MAIN_THREAD_FAVOR_FACTOR;
+	} else 
+		trace->buf_size = thread_buffer_size;
+
 	trace->buf = (char*) malloc(sizeof(char) * trace->buf_size);
 	MALLOC_ERROR_HANDLER(trace->buf, "[x] Not enough space to allocate the buffer\n");
 	trace->cursor = 0;
@@ -256,6 +264,9 @@ void Config() {
 	if (isThreadFlushed) isBuffered = true;
 	INFO("[*] Is Thread flushed? %d\n", isThreadFlushed);
 
+	isMainThreadFavored = KnobFavorMainThread.Value();
+	INFO("[*] Is main thread favored? %d\n", isMainThreadFavored);
+
 	trace_limit = KnobTraceLimit.Value() > 0 ? KnobTraceLimit.Value()*Mb : TRACE_LIMIT;
 	INFO("[*] Trace limit: %dMb\n", trace_limit/Mb);
 
@@ -269,6 +280,11 @@ void Usage() {
 	ERROR((KNOB_BASE::StringKnobSummary() + "\n").c_str());
 }
 
+void ApplicationStartFunction(void* v) {
+	REPORT("[+] Started timer\n");
+	tv = clock();
+}
+
 void PrepareForFini(void* v) {
 	if (isThreadFlushed) {
 		INFO("[*] Waiting for flusher to terminate\n");
@@ -279,11 +295,12 @@ void PrepareForFini(void* v) {
 }
 
 void Fini(INT32 code, VOID *v) {
-	fprintf(stdout, "=======================\n");
-	fprintf(stdout, "Trace finished\n");
-	//fprintf(stdout, "Size: %d Kb\n", raw_trace->trace_size / (1024));
-	fprintf(stdout, "Threads spawned: %d\n", spawned_threads_no);
-	fprintf(stdout, "=======================\n");
+	REPORT("=======================\n");
+	REPORT("Trace finished\n");
+	REPORT("Elapsed time: %d ms\n", clock() - tv);
+	REPORT("Size: %d Kb\n", trace_size/Mb);
+	REPORT("Threads spawned: %d\n", spawned_threads_no);
+	REPORT("=======================\n");
 }
 
 int main(int argc, char *argv[]) {
@@ -323,6 +340,7 @@ int main(int argc, char *argv[]) {
 	PIN_AddThreadStartFunction(ThreadStart, 0);
 	PIN_AddThreadFiniFunction(ThreadFini, 0);
 
+	PIN_AddApplicationStartFunction(ApplicationStartFunction, 0);
 	PIN_AddPrepareForFiniFunction(PrepareForFini, 0);
 	PIN_AddFiniFunction(Fini, 0);
 

@@ -1,4 +1,5 @@
-$TESTS_NUM = 3
+$TESTS_NUM = 5
+$TRACE_LIMIT = 10240
 
 function clear_env() {
     Invoke-Expression "rm trace*"
@@ -22,8 +23,8 @@ function runTests ($tag, $cmd) {
     Write-Host "Average time: $avg_time"
 }
 
-$PROG = "C:\Users\tulim\Downloads\fciv.exe -md5 -sha1 C:\Users\tulim\Downloads\xubuntu-18.04-desktop-amd64.iso"
-$BASE = "C:\Pin35\pin.exe -t C:\Pin35\icount32.dll -trace_limit 2048"
+$PROG = "systeminfo"
+$BASE = "C:\Pin35\pin.exe -t C:\Pin35\icount32.dll -trace_limit $TRACE_LIMIT"
 Write-Host "--- Beginning Tests for --- $PROG"
 
 runTests "Original" "$PROG"

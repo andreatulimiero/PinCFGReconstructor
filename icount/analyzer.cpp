@@ -49,7 +49,7 @@ bool hasReachedTraceLimit[THREADS_MAX_NO];
 		trace_size += buf_len;\
 	}
 
-#define recordTraceToFile(f, buf, buf_len, trace) { fwrite(buf, sizeof(char), buf_len, f); trace_size += buf_len; }
+#define recordTraceToFile(f, buf, buf_len, trace) {  trace_size += buf_len; }
 
 void waitFlushEnd(doub_buf_trace_t* dbt, THREADID thread_idx) {
 	INFO("[*]{Thread %d} Waiting for flush to be finished\n", thread_idx);
@@ -174,12 +174,12 @@ void Ins(INS ins, void* v) {
 
 		INS_InsertCall(ins, IPOINT_BEFORE,
 			(AFUNPTR) INS_Analysis,
-					   IARG_PTR,
-					   disassembled_ins,
-					   IARG_UINT32,
-					   disassembled_ins_len,
-					   IARG_THREAD_ID,
-					   IARG_END);
+			IARG_PTR,
+			disassembled_ins,
+			IARG_UINT32,
+			disassembled_ins_len,
+			IARG_THREAD_ID,
+			IARG_END);
 
 		INS_InsertCall(ins, IPOINT_BEFORE,
 			(AFUNPTR)INS_JumpAnalysis,

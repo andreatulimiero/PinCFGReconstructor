@@ -1,5 +1,4 @@
 ﻿  analyzer.cpp
-  flusher.cpp
-  Generating Code...
+analyzer.cpp(270): warning C4307: '*' : integral constant overflow
      Creating library C:\Pin35\icount32.lib and object C:\Pin35\icount32.exp
   MyPinTool.vcxproj -> C:\Pin35\icount32.dll

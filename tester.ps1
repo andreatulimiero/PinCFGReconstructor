@@ -27,9 +27,12 @@ $PROG = "driverquery /v"
 $BASE = "C:\Pin35\pin.exe -t C:\Pin35\icount32.dll -trace_limit $TRACE_LIMIT"
 Write-Host "--- Beginning Tests for --- $PROG"
 
-# runTests "Original" "$PROG"
+$SM_THREAD_BUF = 30
+$XL_THREAD_BUF = 200
+
+runTests "Original" "$PROG"
 # runTests "Flushed" "$BASE -- $PROG"
-runTests "Buffered version (50Mb)" "$BASE -buffered -thread_buffer_size 50 -- $PROG"
-runTests "Buffered version (300Mb)" "$BASE -buffered -thread_buffer_size 300 -favor_main_thread -- $PROG"
-runTests "Thread flushed version (50Mb)" "$BASE -thread_flushed -thread_buffer_size 50 -- $PROG"
-runTests "Thread flushed version (200Mb)" "$BASE -buffered -thread_buffer_size 200 -favor_main_thread -- $PROG"
+runTests "Buffered version ($SM_THREAD_BUF Mb)" "$BASE -buffered -thread_buffer_size $SM_THREAD_BUF -- $PROG"
+runTests "Buffered version ($XL_THREAD_BUF Mb)" "$BASE -buffered -thread_buffer_size $XL_THREAD_BUF -favor_main_thread -- $PROG"
+runTests "Thread flushed version ($SM_THREAD_BUF Mb)" "$BASE -thread_flushed -thread_buffer_size $SM_THREAD_BUF -- $PROG"
+runTests "Thread flushed version ($XL_THREAD_BUF Mb)" "$BASE -buffered -thread_buffer_size $XL_THREAD_BUF -favor_main_thread -- $PROG"

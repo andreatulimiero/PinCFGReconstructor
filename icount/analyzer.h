@@ -19,8 +19,10 @@ typedef struct doub_buf_trace_s {
 	PIN_SEMAPHORE end_flush_sem;
 } doub_buf_trace_t;
 
-#define flushTraceToFile(f, buf, buf_len) { fwrite(buf, sizeof(char), buf_len, f); }
+#define flushTraceToFile(f, buf, buf_len) { fwrite(buf, sizeof(char), buf_len, f); fflush(f); }
 
 extern size_t spawned_threads_no;
 extern PIN_MUTEX flusher_req_mutex;
 extern PIN_SEMAPHORE flusher_ready_sem;
+
+extern time_t total_flusher_time;

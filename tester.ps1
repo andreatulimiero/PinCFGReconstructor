@@ -23,12 +23,12 @@ function runTests ($tag, $cmd) {
     Write-Host "Average time: $avg_time"
 }
 
-$PROG = "systeminfo"
+$PROG = "driverquery /v"
 $BASE = "C:\Pin35\pin.exe -t C:\Pin35\icount32.dll -trace_limit $TRACE_LIMIT"
 Write-Host "--- Beginning Tests for --- $PROG"
 
-runTests "Original" "$PROG"
-runTests "Flushed" "$BASE -- $PROG"
+# runTests "Original" "$PROG"
+# runTests "Flushed" "$BASE -- $PROG"
 runTests "Buffered version (50Mb)" "$BASE -buffered -thread_buffer_size 50 -- $PROG"
 runTests "Buffered version (300Mb)" "$BASE -buffered -thread_buffer_size 300 -favor_main_thread -- $PROG"
 runTests "Thread flushed version (50Mb)" "$BASE -thread_flushed -thread_buffer_size 50 -- $PROG"

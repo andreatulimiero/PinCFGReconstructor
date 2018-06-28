@@ -4,6 +4,7 @@
 #include "pin.H"
 #include "constants.h"
 #include "loggers.h"
+#include "utils.h"
 #include "error_handlers.h"
 #include "analyzer.h"
 #include "flusher.h"
@@ -26,6 +27,11 @@ KNOB <size_t> KnobThreadBufferSize(KNOB_MODE_WRITEONCE, "pintool",
 KNOB <BOOL> KnobFavorMainThread(KNOB_MODE_WRITEONCE, "pintool",
 								"favor_main_thread", "false", "allocate a quarter of thread buffer for thread that are not 0");
 
+time_t total_time;
+time_t total_wait_time;
+time_t total_flusher_time;
+
+// Time for each traceLimitGuard execution
 time_t tv;
 
 bool isBuffered;
@@ -49,7 +55,7 @@ bool hasReachedTraceLimit[THREADS_MAX_NO];
 		trace_size += buf_len;\
 	}
 
-#define recordTraceToFile(f, buf, buf_len, trace) {  trace_size += buf_len; }
+#define recordTraceToFile(f, buf, buf_len, trace) { flushTraceToFile(f, buf, buf_len); trace_size += buf_len; }
 
 void waitFlushEnd(doub_buf_trace_t* dbt, THREADID thread_idx) {
 	INFO("[*]{Thread %d} Waiting for flush to be finished\n", thread_idx);
@@ -83,6 +89,8 @@ bool traceLimitGuard(trace_t* trace, size_t buf_len, THREADID thread_idx) {
 		flushTraceToFile(files[thread_idx], trace->buf, trace->cursor);
 		trace->cursor = 0;
 	} else {
+		if (!thread_idx)
+			START_STOPWATCH(tv);
 		// Thread buffer limit has been reached, and flusher thread option is on
 		doub_buf_trace_t* dbt = (doub_buf_trace_t*) trace;
 		if (dbt->isFlushBufEmpty) {
@@ -112,6 +120,8 @@ bool traceLimitGuard(trace_t* trace, size_t buf_len, THREADID thread_idx) {
 				requestFlush(dbt, files[thread_idx], thread_idx);
 			}
 		}
+		if (!thread_idx)
+			total_wait_time += GET_STOPWATCH_LAP(tv);
 	}
 	return false;
 }
@@ -281,8 +291,7 @@ void Usage() {
 }
 
 void ApplicationStartFunction(void* v) {
-	REPORT("[+] Started timer\n");
-	tv = clock();
+	START_STOPWATCH(total_time);
 }
 
 void PrepareForFini(void* v) {
@@ -297,7 +306,9 @@ void PrepareForFini(void* v) {
 void Fini(INT32 code, VOID *v) {
 	REPORT("=======================\n");
 	REPORT("Trace finished\n");
-	REPORT("Elapsed time: %d ms\n", clock() - tv);
+	REPORT("Time spent to sync with flusher: %d ms\n", total_wait_time);
+	REPORT("Time the flusher was running: %d ms\n", total_flusher_time);
+	REPORT("Elapsed time: %d ms\n", GET_STOPWATCH_LAP(total_time));
 	REPORT("Size: %d Kb\n", trace_size/Mb);
 	REPORT("Threads spawned: %d\n", spawned_threads_no);
 	REPORT("=======================\n");

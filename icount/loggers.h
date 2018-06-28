@@ -1,6 +1,6 @@
 #pragma once
 
-#define INFO_LEVEL 0
+#define INFO_LEVEL 1
 #define DEBUG_LEVEL 0
 
 #if INFO_LEVEL

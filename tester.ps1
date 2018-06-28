@@ -22,9 +22,9 @@ function runTests ($tag, $cmd) {
     Write-Host "Average time: $avg_time"
 }
 
-Write-Host "--- Beginning Tests for driverquery /v ---"
 $PROG = "C:\Users\tulim\Downloads\fciv.exe -md5 -sha1 C:\Users\tulim\Downloads\xubuntu-18.04-desktop-amd64.iso"
 $BASE = "C:\Pin35\pin.exe -t C:\Pin35\icount32.dll -trace_limit 2048"
+Write-Host "--- Beginning Tests for --- $PROG"
 
 runTests "Original" "$PROG"
 runTests "Flushed" "$BASE -- $PROG"

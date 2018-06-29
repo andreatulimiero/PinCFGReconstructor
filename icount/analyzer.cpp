@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <map>
 #include <time.h>
 #include "pin.H"
 #include "constants.h"
@@ -48,6 +49,8 @@ const char* prog_name;
 trace_t* traces[THREADS_MAX_NO];
 FILE* files[THREADS_MAX_NO];
 bool hasReachedTraceLimit[THREADS_MAX_NO];
+
+static map<ADDRINT, char*> disasm_ins_at_addr;
 
 #define recordTraceInMemory(buf, buf_len, trace) {\
 		memcpy(trace->buf + trace->cursor, buf, buf_len);\
@@ -107,7 +110,7 @@ bool traceLimitGuard(trace_t* trace, size_t buf_len, THREADID thread_idx) {
 			dbt->flush_buf = trace->buf;
 			dbt->flush_buf_len = trace->cursor;
 			trace->buf = (char*) malloc(sizeof(char) * trace->buf_size);
-			MALLOC_ERROR_HANDLER(trace->buf, "[x] Not enough space to allocare another buffer for the trace\n");
+			MALLOC_ERROR_HANDLER(trace->buf, "[x] Not enough space to allocate another buffer for the trace\n");
 			trace->cursor = 0;
 			dbt->isFlushBufEmpty = false;
 			/* We try to gain the privilege to talk with the flusher
@@ -170,6 +173,9 @@ inline void INS_JumpAnalysis(ADDRINT target_branch, INT32 taken, THREADID thread
 		recordTraceInMemory(buf, buf_len, trace)
 	else
 		recordTraceToFile(files[thread_idx], buf, buf_len, trace);
+
+	// Since this is created each time the instruction is encountered we can delete this
+	free(buf);
 }
 
 void Ins(INS ins, void* v) {
@@ -180,7 +186,7 @@ void Ins(INS ins, void* v) {
 	- 0 terminator (1 byte)
 	*/
 	uint32_t disassembled_ins_len = strlen(disassembled_ins_s.c_str()) + 2;
-	char* disassembled_ins = (char*)malloc(sizeof(char) * (disassembled_ins_len));
+	char* disassembled_ins = (char*) malloc(sizeof(char) * (disassembled_ins_len));
 	MALLOC_ERROR_HANDLER(disassembled_ins, "[x] Not enough space to allocate disassembled_ins\n");
 	disassembled_ins[0] = INS_DELIMITER;
 	disassembled_ins[disassembled_ins_len - 1] = '\0';
@@ -191,7 +197,6 @@ void Ins(INS ins, void* v) {
 	}
 
 	if (INS_IsBranchOrCall(ins)) {
-
 		INS_InsertCall(ins, IPOINT_BEFORE,
 			(AFUNPTR) INS_Analysis,
 			IARG_PTR,

@@ -20,6 +20,7 @@ typedef struct doub_buf_trace_s {
 } doub_buf_trace_t;
 
 #define flushTraceToFile(f, buf, buf_len) { fwrite(buf, sizeof(char), buf_len, f); fflush(f); }
+#define flushTraceToFile(f, buf, buf_len) { while (0) {} }
 
 extern size_t spawned_threads_no;
 extern PIN_MUTEX flusher_req_mutex;

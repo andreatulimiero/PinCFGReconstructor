@@ -28,8 +28,10 @@ KNOB <BOOL> KnobFavorMainThread(KNOB_MODE_WRITEONCE, "pintool",
 								"favor_main_thread", "false", "allocate a quarter of thread buffer for thread that are not 0");
 
 time_t total_time;
+time_t total_sync_time;
 time_t total_wait_time;
 time_t total_flusher_time;
+time_t total_flusher_flushing_time;
 time_t total_flushing_time;
 
 bool isBuffered;
@@ -56,8 +58,11 @@ bool hasReachedTraceLimit[THREADS_MAX_NO];
 #define recordTraceToFile(f, buf, buf_len, trace) { flushTraceToFile(f, buf, buf_len); trace_size += buf_len; }
 
 void waitFlushEnd(doub_buf_trace_t* dbt, THREADID thread_idx) {
+	time_t tv;
 	INFO("[*]{Thread %d} Waiting for flush to be finished\n", thread_idx);
+	START_STOPWATCH(tv);
 	PIN_SemaphoreWait(&dbt->end_flush_sem);
+	total_wait_time += GET_STOPWATCH_LAP(tv);
 }
 
 void requestFlush(doub_buf_trace_t* dbt, FILE* f, THREADID thread_idx) {
@@ -84,11 +89,13 @@ bool traceLimitGuard(trace_t* trace, size_t buf_len, THREADID thread_idx) {
 
 	if (!isThreadFlushed) {
 		time_t tv;
-		START_STOPWATCH(tv);
+		if (!thread_idx)
+			START_STOPWATCH(tv);
 		INFO("[*] Thread buffer limit reached, flushing\n");
 		flushTraceToFile(files[thread_idx], trace->buf, trace->cursor);
 		trace->cursor = 0;
-		total_flushing_time += GET_STOPWATCH_LAP(tv);
+		if (!thread_idx)
+			total_flushing_time += GET_STOPWATCH_LAP(tv);
 	} else {
 		time_t tv;
 		if (!thread_idx)
@@ -123,7 +130,7 @@ bool traceLimitGuard(trace_t* trace, size_t buf_len, THREADID thread_idx) {
 			}
 		}
 		if (!thread_idx)
-			total_wait_time += GET_STOPWATCH_LAP(tv);
+			total_sync_time += GET_STOPWATCH_LAP(tv);
 	}
 	return false;
 }
@@ -209,7 +216,7 @@ void Img(IMG img, void* v) {
 }
 
 void ThreadStart(THREADID thread_idx, CONTEXT* ctx, INT32 flags, VOID* v) {
-	INFO("[*] Spawned thread %d\n", thread_idx);
+	INFO("[*] Spawned thread %d with OS_THREADID %d\n", thread_idx,  PIN_GetTid());
 
 	PIN_GetLock(&config_lock, thread_idx);
 	/* Create output file */
@@ -267,6 +274,7 @@ void ThreadFini(THREADID thread_idx, const CONTEXT* ctx, INT32 code, VOID* v) {
 	}
 	fclose(files[thread_idx]);
 
+	total_time += GET_STOPWATCH_LAP(total_time);
 	INFO("[*]{Thread %d} Trace saved\n", thread_idx);
 }
 
@@ -308,14 +316,19 @@ void PrepareForFini(void* v) {
 }
 
 void Fini(INT32 code, VOID *v) {
-	REPORT("=======================\n");
-	REPORT("Trace finished\n");
-	REPORT("Time spent to sync with flusher: %d ms\n", total_wait_time);
-	REPORT("Time the flusher was running: %d ms\n", total_flusher_time);
-	REPORT("Time spent waiting for flushing: %d ms\n", total_flushing_time);
-	REPORT("Elapsed time: %d ms\n", GET_STOPWATCH_LAP(total_time));
-	REPORT("Size: %d Mb\n", trace_size/Mb);
-	REPORT("Threads spawned: %d\n", spawned_threads_no);
+	//REPORT("=======================\n");
+	//REPORT("Trace finished\n");
+	if (isThreadFlushed) {
+		REPORT("Time spent to sync with flusher: %d ms\n", total_sync_time);
+		REPORT("Time spent waiting for flusher: %d ms\n", total_wait_time);
+		REPORT("Time the flusher was flushing: %d ms\n", total_flusher_flushing_time);
+		REPORT("Time the flusher was running: %d ms\n", total_flusher_time);
+	} else if (isBuffered) {
+		REPORT("Time spent waiting for flushing: %d ms\n", total_flushing_time);
+	}
+	REPORT("Main thread time: %d ms\n", total_time);
+	//REPORT("Size: %d Mb\n", trace_size/Mb);
+	//REPORT("Threads spawned: %d\n", spawned_threads_no);
 	REPORT("=======================\n");
 }
 

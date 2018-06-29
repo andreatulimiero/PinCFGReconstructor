@@ -26,3 +26,4 @@ extern PIN_MUTEX flusher_req_mutex;
 extern PIN_SEMAPHORE flusher_ready_sem;
 
 extern time_t total_flusher_time;
+extern time_t total_flusher_flushing_time;

@@ -24,19 +24,27 @@ function runTests ($tag, $cmd) {
     Write-Host "{$tag Average time: $avg_time}"
 }
 
-$PROG = "C:\Users\tulim\Downloads\fciv.exe -md5 -sha1 C:\Users\tulim\Downloads\xubuntu-18.04-desktop-amd64.iso"
+$PROG = "C:\Users\tulim\Downloads\fciv.vmp.exe -md5 -sha1 C:\Users\tulim\Downloads\ubuntu-17.10-desktop-amd64.iso"
 $BASE = "C:\Pin35\pin.exe -t C:\Pin35\icount32.dll -trace_limit $TRACE_LIMIT"
 Write-Host "--- Beginning Tests for --- $PROG"
 
 $XS_THREAD_BUF = 10
 $SM_THREAD_BUF = 30
+$MD_THREAD_BUF = 50
+$LG_THREAD_BUF = 100
 $XL_THREAD_BUF = 200
 
-runTests "Original" "$PROG"
+# runTests "Original" "$PROG"
 # runTests "Flushed" "$BASE -- $PROG"
-# runTests "Buffered version ($XS_THREAD_BUF Mb)" "$BASE -buffered -thread_buffer_size $SM_THREAD_BUF -- $PROG"
-runTests "Buffered version ($SM_THREAD_BUF Mb)" "$BASE -buffered -thread_buffer_size $SM_THREAD_BUF -- $PROG"
+
+runTests "Buffered version ($XS_THREAD_BUF Mb)" "$BASE -buffered -thread_buffer_size $XS_THREAD_BUF -- $PROG"
+# runTests "Buffered version ($SM_THREAD_BUF Mb)" "$BASE -buffered -thread_buffer_size $SM_THREAD_BUF -- $PROG"
+# runTests "Buffered version ($MD_THREAD_BUF Mb)" "$BASE -buffered -thread_buffer_size $MD_THREAD_BUF -- $PROG"
+# runTests "Buffered version ($LG_THREAD_BUF Mb)" "$BASE -buffered -thread_buffer_size $LG_THREAD_BUF -- $PROG"
 # runTests "Buffered version ($XL_THREAD_BUF Mb)" "$BASE -buffered -thread_buffer_size $XL_THREAD_BUF -favor_main_thread -- $PROG"
-# runTests "Thread flushed version ($XS_THREAD_BUF Mb)" "$BASE -thread_flushed -thread_buffer_size $XS_THREAD_BUF -- $PROG"
-runTests "Thread flushed version ($SM_THREAD_BUF Mb)" "$BASE -thread_flushed -thread_buffer_size $SM_THREAD_BUF -- $PROG"
+
+runTests "Thread flushed version ($XS_THREAD_BUF Mb)" "$BASE -thread_flushed -thread_buffer_size $XS_THREAD_BUF -- $PROG"
+# runTests "Thread flushed version ($SM_THREAD_BUF Mb)" "$BASE -thread_flushed -thread_buffer_size $SM_THREAD_BUF -- $PROG"
+# runTests "Thread flushed version ($MD_THREAD_BUF Mb)" "$BASE -thread_flushed -thread_buffer_size $MD_THREAD_BUF -- $PROG"
+# runTests "Thread flushed version ($LG_THREAD_BUF Mb)" "$BASE -thread_flushed -thread_buffer_size $LG_THREAD_BUF -- $PROG"
 # runTests "Thread flushed version ($XL_THREAD_BUF Mb)" "$BASE -thread_flushed -thread_buffer_size $XL_THREAD_BUF -favor_main_thread -- $PROG"

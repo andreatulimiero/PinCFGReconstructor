@@ -11,22 +11,24 @@
 #include "flusher.h"
 
 static TLS_KEY tls_key = INVALID_TLS_KEY;
-PIN_LOCK config_lock;
+PIN_LOCK pin_lock;
 PIN_MUTEX flusher_req_mutex;
 PIN_SEMAPHORE flusher_ready_sem;
 PIN_THREAD_UID flusher_uid;
 
 /** Custom options for our PIN tool **/
 KNOB <BOOL> KnobIsBuffered(KNOB_MODE_WRITEONCE, "pintool",
-	"buffered", "false", "whether or not the trace is buffered");
+						   "buffered", "false", "whether or not the trace is buffered");
 KNOB <BOOL> KnobIsThreadFlushed(KNOB_MODE_WRITEONCE, "pintool",
-						   "thread_flushed", "false", "whether or not the trace has a thread for flushing");
+								"thread_flushed", "false", "whether or not the trace has a thread for flushing");
 KNOB <size_t> KnobTraceLimit(KNOB_MODE_WRITEONCE, "pintool",
-	"trace_limit", "0", "size of the trace limit");
+							 "trace_limit", "0", "size of the trace limit");
 KNOB <size_t> KnobThreadBufferSize(KNOB_MODE_WRITEONCE, "pintool",
 							 "thread_buffer_size", "0", "size of the per-thread buffer");
 KNOB <BOOL> KnobFavorMainThread(KNOB_MODE_WRITEONCE, "pintool",
 								"favor_main_thread", "false", "allocate a quarter of thread buffer for thread that are not 0");
+KNOB <BOOL> KnobIsOnline(KNOB_MODE_WRITEONCE, "pintool",
+						 "online", "false", "make an online analysis");
 
 time_t total_time;
 time_t total_sync_time;
@@ -38,6 +40,7 @@ time_t total_flushing_time;
 bool isBuffered;
 bool isThreadFlushed;
 bool isMainThreadFavored;
+bool isOnline;
 size_t trace_limit;
 size_t thread_buffer_size;
 
@@ -50,7 +53,7 @@ trace_t* traces[THREADS_MAX_NO];
 FILE* files[THREADS_MAX_NO];
 bool hasReachedTraceLimit[THREADS_MAX_NO];
 
-static map<ADDRINT, char*> disasm_ins_at_addr;
+pair<ADDRINT, ADDRINT> text_sec_memory(0, 0);
 
 #define recordTraceInMemory(buf, buf_len, trace) {\
 		memcpy(trace->buf + trace->cursor, buf, buf_len);\
@@ -216,14 +219,37 @@ void Ins(INS ins, void* v) {
 }
 
 void Img(IMG img, void* v) {
-	if (strstr(IMG_Name(img).c_str(), prog_name))
-		INFO("[+] Image %s loaded at %x\n", IMG_Name(img).c_str(), IMG_StartAddress(img));
+	if (!strstr(IMG_Name(img).c_str(), prog_name)) return;
+	
+	char dump_file_name[256] = { 0 };
+	sprintf(dump_file_name, "%s.dump", prog_name);
+	FILE* dump_file = fopen(dump_file_name, "w+");
+	INFO("[*] Requesting a dump of the main IMG\n");
+	for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec)) {
+		for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn)) {
+			RTN_Open(rtn);
+			for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
+				fprintf(dump_file, "%s\n", INS_Disassemble(ins).c_str());
+			}
+			RTN_Close(rtn);
+		}
+	}
+	fflush(dump_file);
+	fclose(dump_file);
+	INFO("%s\n", dump_file);
+
+	INFO("[+] Image %s loaded at %x\n", IMG_Name(img).c_str(), IMG_StartAddress(img));
+	for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec)) {
+		string sec_name = SEC_Name(sec);
+		if (sec_name == TEXT_SEC_NAME)
+			text_sec_memory = make_pair(SEC_Address(sec), SEC_Size(sec));
+	}
 }
 
 void ThreadStart(THREADID thread_idx, CONTEXT* ctx, INT32 flags, VOID* v) {
 	INFO("[*] Spawned thread %d with OS_THREADID %d\n", thread_idx,  PIN_GetTid());
 
-	PIN_GetLock(&config_lock, thread_idx);
+	PIN_GetLock(&pin_lock, thread_idx);
 	/* Create output file */
 	char filename[TRACE_NAME_LENGTH_LIMIT] = { 0 };
 	sprintf(filename, "trace_%d.out", thread_idx);
@@ -259,7 +285,7 @@ void ThreadStart(THREADID thread_idx, CONTEXT* ctx, INT32 flags, VOID* v) {
 		PIN_ExitProcess(1);
 	}
 	spawned_threads_no++;
-	PIN_ReleaseLock(&config_lock);
+	PIN_ReleaseLock(&pin_lock);
 }
 
 void ThreadFini(THREADID thread_idx, const CONTEXT* ctx, INT32 code, VOID* v) {
@@ -300,6 +326,8 @@ void Config() {
 	thread_buffer_size = KnobThreadBufferSize.Value() > 0 ? KnobThreadBufferSize.Value()*Mb : THREAD_BUFFER_SIZE;
 	INFO("[*] Thread buffer size: %dMb\n", thread_buffer_size/Mb);
 
+	isOnline = KnobIsOnline.Value();
+	INFO("[*] Is online? %d\n", isOnline);
 }
 
 void Usage() {
@@ -312,12 +340,34 @@ void ApplicationStartFunction(void* v) {
 }
 
 void PrepareForFini(void* v) {
-	if (isThreadFlushed) {
-		INFO("[*] Waiting for flusher to terminate\n");
-		flusher::isPoisoned = true;
-		PIN_SemaphoreSet(&flusher::flusher_sem);
-		PIN_WaitForThreadTermination(flusher_uid, PIN_INFINITE_TIMEOUT, NULL);
-	}
+	INFO("[*] Adding prepare for fini function %d\n", isOnline);
+	if (isOnline) {
+		PIN_LockClient();
+		IMG img = IMG_FindByAddress(text_sec_memory.first);
+		ERROR_HANDLER(!IMG_Valid(img), "[x] Invalid image to dump\n");
+		PIN_UnlockClient();
+		char dump_file_name[256] = { 0 };
+		sprintf(dump_file_name, "%s_fini.dump", prog_name);
+		FILE* dump_file = fopen(dump_file_name, "w+");
+		INFO("[*] Requesting a dump of the main IMG\n");
+		for (SEC sec= IMG_SecHead(img);	SEC_Valid(sec); sec = SEC_Next(sec)) {
+			for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn)) {
+				RTN_Open(rtn);
+				for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
+					fprintf(dump_file, "%s\n", INS_Disassemble(ins).c_str());
+				}
+				RTN_Close(rtn);
+			}
+		}
+		fflush(dump_file);
+		fclose(dump_file);
+	} else 
+		if (isThreadFlushed) {
+			INFO("[*] Waiting for flusher to terminate\n");
+			flusher::isPoisoned = true;
+			PIN_SemaphoreSet(&flusher::flusher_sem);
+			PIN_WaitForThreadTermination(flusher_uid, PIN_INFINITE_TIMEOUT, NULL);
+		}
 }
 
 void Fini(INT32 code, VOID *v) {
@@ -335,6 +385,17 @@ void Fini(INT32 code, VOID *v) {
 	//REPORT("Size: %d Mb\n", trace_size/Mb);
 	//REPORT("Threads spawned: %d\n", spawned_threads_no);
 	REPORT("=======================\n");
+}
+
+char* getProgName(char** argv) {
+	while (strcmp(*argv, "--")) {
+		argv++;
+	}
+	char* prog_name = *(argv+1);
+	char* back_slash = strrchr(prog_name, '\\');
+	if (back_slash)
+		return back_slash + 1;
+	return prog_name;
 }
 
 int main(int argc, char *argv[]) {
@@ -355,7 +416,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* Prepare Locks, Mutexes and Semaphores*/
-	PIN_InitLock(&config_lock);
+	PIN_InitLock(&pin_lock);
 	PIN_MutexInit(&flusher_req_mutex);
 	PIN_SemaphoreInit(&flusher_ready_sem);
 	// Flusher
@@ -367,7 +428,7 @@ int main(int argc, char *argv[]) {
 	if (isThreadFlushed)
 		PIN_SpawnInternalThread(flusher::flusherThread, 0, 0, &flusher_uid);
 
-	prog_name = argv[argc - 1];
+	prog_name = getProgName(argv);
 	INS_AddInstrumentFunction(Ins, 0);
 	IMG_AddInstrumentFunction(Img, 0);
 
@@ -378,8 +439,8 @@ int main(int argc, char *argv[]) {
 	PIN_AddPrepareForFiniFunction(PrepareForFini, 0);
 	PIN_AddFiniFunction(Fini, 0);
 
-	INFO("[*] trace_t size: %d\n", sizeof(trace_t));
-	INFO("[*] doub_buf_trace_t size: %d\n", sizeof(doub_buf_trace_t));
+	/*INFO("[*] trace_t size: %d\n", sizeof(trace_t));
+	INFO("[*] doub_buf_trace_t size: %d\n", sizeof(doub_buf_trace_t));*/
 
 	PIN_StartProgram();
 	return 0;

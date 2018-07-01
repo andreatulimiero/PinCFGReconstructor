@@ -14,3 +14,5 @@
 #define TRACE_LIMIT 2047*Mb
 #define TRACE_NAME_LENGTH_LIMIT 128
 #define THREADS_MAX_NO 256
+
+#define TEXT_SEC_NAME ".text"

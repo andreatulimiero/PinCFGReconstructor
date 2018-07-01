@@ -30,13 +30,18 @@ KNOB <BOOL> KnobFavorMainThread(KNOB_MODE_WRITEONCE, "pintool",
 KNOB <BOOL> KnobIsOnline(KNOB_MODE_WRITEONCE, "pintool",
 						 "online", "false", "make an online analysis");
 
+// Stats
 time_t total_time;
 time_t total_sync_time;
 time_t total_wait_time;
 time_t total_flusher_time;
 time_t total_flusher_flushing_time;
 time_t total_flushing_time;
+size_t spawned_threads_no;
+size_t trace_size;
+size_t total_flushes;
 
+// Configs
 bool isBuffered;
 bool isThreadFlushed;
 bool isMainThreadFavored;
@@ -44,8 +49,6 @@ bool isOnline;
 size_t trace_limit;
 size_t thread_buffer_size;
 
-size_t spawned_threads_no;
-size_t trace_size;
 bool isFirstIns = true;
 const char* prog_name;
 
@@ -95,13 +98,11 @@ bool traceLimitGuard(trace_t* trace, size_t buf_len, THREADID thread_idx) {
 
 	if (!isThreadFlushed) {
 		time_t tv;
-		if (!thread_idx)
-			START_STOPWATCH(tv);
 		INFO("[*] Thread buffer limit reached, flushing\n");
+		if (!thread_idx) START_STOPWATCH(tv);
 		flushTraceToFile(files[thread_idx], trace->buf, trace->cursor);
+		if (!thread_idx) total_flushing_time += GET_STOPWATCH_LAP(tv);
 		trace->cursor = 0;
-		if (!thread_idx)
-			total_flushing_time += GET_STOPWATCH_LAP(tv);
 	} else {
 		time_t tv;
 		if (!thread_idx)
@@ -290,7 +291,7 @@ void ThreadStart(THREADID thread_idx, CONTEXT* ctx, INT32 flags, VOID* v) {
 
 void ThreadFini(THREADID thread_idx, const CONTEXT* ctx, INT32 code, VOID* v) {
 	trace_t* trace = (trace_t*) PIN_GetThreadData(tls_key, thread_idx);
-	INFO("[*]{Thread %d} Ended, trace limit reached: %d\n", thread_idx, hasReachedTraceLimit[thread_idx]);
+	REPORT("[*]{Thread %d} Ended, trace limit reached: %d\n", thread_idx, hasReachedTraceLimit[thread_idx]);
 	if (isThreadFlushed) {
 		doub_buf_trace_t* dbt = (doub_buf_trace_t*) trace;
 		if (dbt->isFlushing) {
@@ -377,9 +378,11 @@ void Fini(INT32 code, VOID *v) {
 		REPORT("Time spent to sync with flusher: %d ms\n", total_sync_time);
 		REPORT("Time spent waiting for flusher: %d ms\n", total_wait_time);
 		REPORT("Time the flusher was flushing: %d ms\n", total_flusher_flushing_time);
+		REPORT("Average time per flush: %d ms\n", total_flusher_flushing_time / total_flushes);
 		REPORT("Time the flusher was running: %d ms\n", total_flusher_time);
 	} else if (isBuffered) {
-		REPORT("Time spent waiting for flushing: %d ms\n", total_flushing_time);
+		REPORT("Time spent for flushing: %d ms\n", total_flushing_time);
+		REPORT("Average time per flush: %d ms\n", total_flushing_time / total_flushes);
 	}
 	REPORT("Main thread time: %d ms\n", total_time);
 	//REPORT("Size: %d Mb\n", trace_size/Mb);

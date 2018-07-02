@@ -295,6 +295,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="analyzer.cpp" />
+    <ClCompile Include="callbacks.cpp" />
     <ClCompile Include="flusher.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -305,11 +306,13 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="callbacks.h" />
     <ClInclude Include="constants.h" />
     <ClInclude Include="error_handlers.h" />
     <ClInclude Include="flusher.h" />
     <ClInclude Include="analyzer.h" />
     <ClInclude Include="loggers.h" />
+    <ClInclude Include="proc.h" />
     <ClInclude Include="utils.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

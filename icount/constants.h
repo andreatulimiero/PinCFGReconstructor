@@ -8,7 +8,7 @@
 #define MAIN_THREAD_FAVOR_FACTOR 4
 
 #define INS_DELIMITER '\n'
-#define ADDR_CHARS sizeof(ADDRINT)
+#define MAX_FILENAME_LENGTH 128
 
 #define THREAD_BUFFER_SIZE 30*Mb
 #define TRACE_LIMIT 2047*Mb
@@ -16,3 +16,5 @@
 #define THREADS_MAX_NO 256
 
 #define TEXT_SEC_NAME ".text"
+
+#define INVALID_ENTRY_POINT 0

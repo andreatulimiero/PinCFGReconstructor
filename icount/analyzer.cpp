@@ -1,16 +1,17 @@
 #include <stdio.h>
 #include <string.h>
-#include <map>
 #include <time.h>
 #include "pin.H"
-#include "constants.h"
+#include "analyzer.h"
+#include "callbacks.h"
+#include "flusher.h"
+
 #include "loggers.h"
 #include "utils.h"
 #include "error_handlers.h"
-#include "analyzer.h"
-#include "flusher.h"
 
-static TLS_KEY tls_key = INVALID_TLS_KEY;
+TLS_KEY tls_key = INVALID_TLS_KEY;
+
 PIN_LOCK pin_lock;
 PIN_MUTEX flusher_req_mutex;
 PIN_SEMAPHORE flusher_ready_sem;
@@ -37,9 +38,13 @@ time_t total_wait_time;
 time_t total_flusher_time;
 time_t total_flusher_flushing_time;
 time_t total_flushing_time;
+time_t total_writed_intervals_creation_time;
+time_t total_wxorx_check_time;
+
 size_t spawned_threads_no;
 size_t trace_size;
 size_t total_flushes;
+proc_info_t* proc_info;
 
 // Configs
 bool isBuffered;
@@ -56,19 +61,14 @@ trace_t* traces[THREADS_MAX_NO];
 FILE* files[THREADS_MAX_NO];
 bool hasReachedTraceLimit[THREADS_MAX_NO];
 
+// Online 
+upx_info_t* upx_info;
 ADDRINT img_address;
-bool hasTextSection;
+bool isBinaryPacked = true;
 FILE* upx_dump_file;
+list<pair<ADDRINT, ADDRINT>> written_mem_intervals;
 pair<ADDRINT, ADDRINT> main_img_memory(0, 0);
 pair<ADDRINT, ADDRINT> text_sec_memory(0, 0);
-
-#define recordTraceInMemory(buf, buf_len, trace) {\
-		memcpy(trace->buf + trace->cursor, buf, buf_len);\
-		trace->cursor += buf_len;\
-		trace_size += buf_len;\
-	}
-
-#define recordTraceToFile(f, buf, buf_len, trace) { flushTraceToFile(f, buf, buf_len); trace_size += buf_len; }
 
 void waitFlushEnd(doub_buf_trace_t* dbt, THREADID thread_idx) {
 	time_t tv;
@@ -146,114 +146,48 @@ bool traceLimitGuard(trace_t* trace, size_t buf_len, THREADID thread_idx) {
 	return false;
 }
 
-inline void INS_Analysis(char* buf, UINT32 buf_len, THREADID thread_idx) {
-	trace_t* trace = (trace_t*)PIN_GetThreadData(tls_key, thread_idx);
-	// Trace limit guard
-	if (traceLimitGuard(trace, buf_len, thread_idx)) return;
-
-	if (isBuffered)
-		recordTraceInMemory(buf, buf_len, trace)
-	else
-		recordTraceToFile(files[thread_idx], buf, buf_len, trace);
-}
-
-inline void INS_JumpAnalysis(ADDRINT target_branch, INT32 taken, THREADID thread_idx) {
-	if (!taken) return;
-	trace_t* trace = (trace_t*) PIN_GetThreadData(tls_key, thread_idx);
-	/* Allocate enough space in order to save:
-	- @ char (1 byte)
-	- address in hex format (sizeof(ADDRINT) * 2 bytes) + '0x' prefix (2 bytes)
-	- \n delimiter (1 byte)
-	- 0 terminator (1 byte)*/
-	size_t buf_len = (sizeof(ADDRINT) * 2 + 5);
-	// Trace limit guard
-	if (traceLimitGuard(trace, buf_len, thread_idx)) return;
-
-	char* buf = (char*)malloc(sizeof(char) * buf_len);
-	MALLOC_ERROR_HANDLER(buf, "[x] Not enough space to allocate the buf for the INS_JumpAnalysis\n");
-	buf[0] = '\n';
-	buf[1] = '@';
-	buf[buf_len - 1] = '\0';
-	// Consider removing this sprintf since it is very slow
-	sprintf(buf + 2, "%x", target_branch);
-
-	if (isBuffered)
-		recordTraceInMemory(buf, buf_len, trace)
-	else
-		recordTraceToFile(files[thread_idx], buf, buf_len, trace);
-
-	// Since this is created each time the instruction is encountered we can delete this
-	free(buf);
-}
-
-inline void INS_UPX(ADDRINT mem_write_target) {
-	if (mem_write_target >= main_img_memory.first && mem_write_target <= main_img_memory.second) {
-		INFO("[*] Function writing in image address\n");
-	}
-}
-
 void Img(IMG img, void* v) {
-	if (!strstr(IMG_Name(img).c_str(), prog_name)) return;
+	if (!IMG_IsMainExecutable(img)) return;
 
 	main_img_memory = make_pair(IMG_LowAddress(img), IMG_LowAddress(img) + IMG_SizeMapped(img));
 	img_address = IMG_LowAddress(img);
-
-	// Dump main IMG
-	/*char dump_file_name[256] = { 0 };
-	sprintf(dump_file_name, "%s.dump", prog_name);
-	FILE* dump_file = fopen(dump_file_name, "w+");
-	INFO("[+] Dumping %s IMG\n", prog_name);
-	for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec)) {
-		for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn)) {
-			RTN_Open(rtn);
-			for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
-				fprintf(dump_file, "%s\n", INS_Disassemble(ins).c_str());
-			}
-			RTN_Close(rtn);
-		}
-	}
-	fflush(dump_file);
-	fclose(dump_file);*/
 
 	INFO("[+] Image %s loaded at 0x%x\n", IMG_Name(img).c_str(), IMG_StartAddress(img));
 	// Find .text section address interval
 	for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec)) {
 		string sec_name = SEC_Name(sec);
 		if (sec_name == TEXT_SEC_NAME) {
-			hasTextSection = true;
+			isBinaryPacked = false;
 			text_sec_memory = make_pair(SEC_Address(sec), SEC_Address(sec) + SEC_Size(sec));
 		}
-	}
-	if (!hasTextSection) {
-		upx_dump_file = fopen("upx.dump", "w+");
 	}
 }
 
 void Ins(INS ins, void* v) {
-	string disassembled_ins_s = INS_Disassemble(ins);
+	string disasm_ins_s = INS_Disassemble(ins);
 	/* Allocate enough space to save
 	- Disassembled instruction (n bytes)
 	- INS_DELIMITER (1 byte)
 	- 0 terminator (1 byte)
 	*/
-	uint32_t disassembled_ins_len = strlen(disassembled_ins_s.c_str()) + 2;
-	char* disassembled_ins = (char*) malloc(sizeof(char) * (disassembled_ins_len));
-	MALLOC_ERROR_HANDLER(disassembled_ins, "[x] Not enough space to allocate disassembled_ins\n");
-	disassembled_ins[0] = INS_DELIMITER;
-	disassembled_ins[disassembled_ins_len - 1] = '\0';
-	strcpy(disassembled_ins + 1, disassembled_ins_s.c_str());
+	uint32_t disasm_ins_len = strlen(disasm_ins_s.c_str()) + 2;
+	char* disasm_ins = (char*) malloc(sizeof(char) * (disasm_ins_len));
+	MALLOC_ERROR_HANDLER(disasm_ins, "[x] Not enough space to allocate disassembled_ins\n");
+	disasm_ins[0] = INS_DELIMITER;
+	disasm_ins[disasm_ins_len - 1] = '\0';
+	strcpy(disasm_ins + 1, disasm_ins_s.c_str());
 	if (isFirstIns) {
 		isFirstIns = false;
-		strcpy(disassembled_ins, disassembled_ins + 1);
+		strcpy(disasm_ins, disasm_ins + 1);
 	}
 
 	if (INS_IsBranchOrCall(ins)) {
 		INS_InsertCall(ins, IPOINT_BEFORE,
 			(AFUNPTR) INS_Analysis,
 			IARG_PTR,
-			disassembled_ins,
+			disasm_ins,
 			IARG_UINT32,
-			disassembled_ins_len,
+			disasm_ins_len,
 			IARG_THREAD_ID,
 			IARG_END);
 
@@ -265,14 +199,37 @@ void Ins(INS ins, void* v) {
 			IARG_END);
 	}
 
-	ADDRINT ins_addr = INS_Address(ins);
 	/*If we are in online mode, no .text section has been found and instruction
 	in main img address*/
-	if (isOnline && !hasTextSection && (ins_addr >= main_img_memory.first && ins_addr <= main_img_memory.second)) {
+	ADDRINT ins_addr = INS_Address(ins);
+	if (isOnline && isBinaryPacked && IN_RANGE(ins_addr, main_img_memory.first, main_img_memory.second)) {
+		if (INS_Opcode(ins) == XED_ICLASS_PUSHAD ||
+			INS_Opcode(ins) == XED_ICLASS_POPAD ||
+			INS_Opcode(ins) == XED_ICLASS_JMP) {
+			INS_InsertCall(ins, IPOINT_BEFORE,
+				(AFUNPTR) INS_UPXEndAnalysis,
+						   IARG_UINT32,
+						   INS_Opcode(ins),
+						   IARG_END);
+		}
+		
+
+		if (INS_IsMemoryWrite(ins)) {
+			INS_InsertCall(ins, IPOINT_BEFORE,
+				(AFUNPTR) INS_WriteAnalysis,
+						   IARG_MEMORYWRITE_EA,
+						   IARG_MEMORYWRITE_SIZE,
+						   IARG_END);
+		}
+		/*if (upx_info->metJmp) {
 		INS_InsertCall(ins, IPOINT_BEFORE,
-			(AFUNPTR) INS_UPX,
-			IARG_ADDRINT,
-			IARG_END);
+				(AFUNPTR) INS_WXorX,
+						   IARG_ADDRINT,
+						   ins_addr,
+						   IARG_PTR,
+						   disasm_ins,
+						   IARG_END);
+		}*/
 	}
 }
 
@@ -369,31 +326,50 @@ void ApplicationStartFunction(void* v) {
 	START_STOPWATCH(total_time);
 }
 
+void dumpImg(IMG img) {
+	char dump_file_name[MAX_FILENAME_LENGTH] = { 0 };
+	sprintf(dump_file_name, "%s_img.dump", prog_name);
+	FILE* dump_file = fopen(dump_file_name, "w+");
+	size_t img_size = IMG_HighAddress(img) - IMG_LowAddress(img);
+	char* dump = (char*) malloc(img_size);
+	PIN_SafeCopy(dump, (void*) IMG_LowAddress(img), img_size);
+	fwrite(dump, sizeof(char), img_size, dump_file);
+	fclose(dump_file);
+}
+
+void dumpSections(IMG img) {
+	for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec)) {
+		INFO("[*] Name: %s, from: 0x%x to: 0x%x\n", SEC_Name(sec).c_str(), SEC_Address(sec), SEC_Address(sec) + SEC_Size(sec))
+		FILE* f = fopen((SEC_Name(sec) + ".dump").c_str(), "w+");
+		char* sec_dump = (char*) malloc(SEC_Size(sec));
+		PIN_SafeCopy(sec_dump, (void*) SEC_Address(sec), SEC_Size(sec));
+		fwrite(sec_dump, sizeof(char), SEC_Size(sec), f);
+		fclose(f);
+	}
+}
+
+void dumpWrittenIntervals() {
+	char dump_file_name[MAX_FILENAME_LENGTH] = { 0 };
+	sprintf(dump_file_name, "%s_written_intervals.dump", prog_name);
+	FILE* dump_file = fopen(dump_file_name, "w+");
+	for each (pair<ADDRINT, ADDRINT> interval in written_mem_intervals) {
+		//INFO("[+] Dumping from 0x%x to 0x%x\n", interval.first, interval.second);
+		char* dump = (char*) malloc(interval.second - interval.first);
+		PIN_SafeCopy(dump, (void*) interval.first, interval.second - interval.first);
+		fprintf(dump_file, "%s", dump);
+	}
+	fclose(dump_file);
+}
+
 void PrepareForFini(void* v) {
 	if (isOnline) {
 		PIN_LockClient();
 		IMG img = IMG_FindByAddress(img_address);
 		ERROR_HANDLER(!IMG_Valid(img), "[x] Invalid image to dump\n");
 		PIN_UnlockClient();
-		char dump_file_name[256] = { 0 };
-		sprintf(dump_file_name, "%s_fini.dump", prog_name);
-		FILE* dump_file = fopen(dump_file_name, "w+");
-		INFO("[*] Requesting a dump of the main IMG %s\n", IMG_Name(img).c_str());
-		char sec_f = 0, rtn_f = 0, ins_f = 0;
-		for (SEC sec= IMG_SecHead(img);	SEC_Valid(sec); sec = SEC_Next(sec)) {
-			if (SEC_Name(sec) != TEXT_SEC_NAME) continue;
-			for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn)) {
-				RTN_Open(rtn);
-				for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
-					ADDRINT ins_addr = INS_Address(ins);
-					if (ins_addr >= main_img_memory.first && ins_addr <= main_img_memory.second)
-						fprintf(dump_file, "%s\n", INS_Disassemble(ins).c_str());
-				}
-				RTN_Close(rtn);
-			}
-		}
-		fflush(dump_file);
-		fclose(dump_file);
+		dumpImg(img);
+		dumpSections(img);
+		dumpWrittenIntervals();
 	} else 
 		if (isThreadFlushed) {
 			INFO("[*] Waiting for flusher to terminate\n");
@@ -407,16 +383,21 @@ void Fini(INT32 code, VOID *v) {
 	//REPORT("=======================\n");
 	//REPORT("Trace finished\n");
 	if (isThreadFlushed) {
-		REPORT("Time spent to sync with flusher: %d ms\n", total_sync_time);
-		REPORT("Time spent waiting for flusher: %d ms\n", total_wait_time);
-		REPORT("Time the flusher was flushing: %d ms\n", total_flusher_flushing_time);
-		REPORT("Average time per flush: %d ms\n", total_flusher_flushing_time / total_flushes);
-		REPORT("Time the flusher was running: %d ms\n", total_flusher_time);
+		REPORT("[i] Time spent to sync with flusher: %d ms\n", total_sync_time);
+		REPORT("[i] Time spent waiting for flusher: %d ms\n", total_wait_time);
+		REPORT("[i] Time the flusher was flushing: %d ms\n", total_flusher_flushing_time);
+		REPORT("[i] Average time per flush: %d ms\n", total_flusher_flushing_time / total_flushes);
+		REPORT("[i] Time the flusher was running: %d ms\n", total_flusher_time);
 	} else if (isBuffered) {
-		REPORT("Time spent for flushing: %d ms\n", total_flushing_time);
-		REPORT("Average time per flush: %d ms\n", total_flushing_time / total_flushes);
+		REPORT("[i] Time spent for flushing: %d ms\n", total_flushing_time);
+		REPORT("[i] Average time per flush: %d ms\n", total_flushing_time / total_flushes);
 	}
-	REPORT("Main thread time: %d ms\n", total_time);
+	if (isOnline && isBinaryPacked) {
+		REPORT("[i] OEP found at 0x%x\n", upx_info->OEP);
+		REPORT("[i] Time spent to create intervals %d ms\n", total_writed_intervals_creation_time);
+		REPORT("[i] Time spent to check WXorX rule %d ms\n", total_wxorx_check_time);
+	}
+	REPORT("[i] Main thread time: %d ms\n", total_time);
 	//REPORT("Size: %d Mb\n", trace_size/Mb);
 	//REPORT("Threads spawned: %d\n", spawned_threads_no);
 	REPORT("=======================\n");
@@ -440,8 +421,11 @@ int main(int argc, char *argv[]) {
 		return 0;
 	}
 
-	/* Prepare the Pintool */
+	/* Config the Pintool */
 	Config();
+
+	// Proc info structure
+	proc_info = (proc_info_t*) malloc(sizeof(proc_info_t));
 
 	/* Prepare TLS */
 	tls_key = PIN_CreateThreadDataKey(NULL);
@@ -462,6 +446,12 @@ int main(int argc, char *argv[]) {
 	/* Spawn flusher thread if necessary */
 	if (isThreadFlushed)
 		PIN_SpawnInternalThread(flusher::flusherThread, 0, 0, &flusher_uid);
+
+	/* Prepare structures for online mode */
+	upx_dump_file = fopen("upx.dump", "w+");
+	upx_info = (upx_info_t*) calloc(1, sizeof(upx_info_t));
+	upx_info->OEP = INVALID_ENTRY_POINT;
+	written_mem_intervals = list<pair<ADDRINT, ADDRINT>>();
 
 	prog_name = getProgName(argv);
 	INS_AddInstrumentFunction(Ins, 0);

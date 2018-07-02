@@ -56,6 +56,10 @@ trace_t* traces[THREADS_MAX_NO];
 FILE* files[THREADS_MAX_NO];
 bool hasReachedTraceLimit[THREADS_MAX_NO];
 
+ADDRINT img_address;
+bool hasTextSection;
+FILE* upx_dump_file;
+pair<ADDRINT, ADDRINT> main_img_memory(0, 0);
 pair<ADDRINT, ADDRINT> text_sec_memory(0, 0);
 
 #define recordTraceInMemory(buf, buf_len, trace) {\
@@ -182,6 +186,49 @@ inline void INS_JumpAnalysis(ADDRINT target_branch, INT32 taken, THREADID thread
 	free(buf);
 }
 
+inline void INS_UPX(ADDRINT mem_write_target) {
+	if (mem_write_target >= main_img_memory.first && mem_write_target <= main_img_memory.second) {
+		INFO("[*] Function writing in image address\n");
+	}
+}
+
+void Img(IMG img, void* v) {
+	if (!strstr(IMG_Name(img).c_str(), prog_name)) return;
+
+	main_img_memory = make_pair(IMG_LowAddress(img), IMG_LowAddress(img) + IMG_SizeMapped(img));
+	img_address = IMG_LowAddress(img);
+
+	// Dump main IMG
+	/*char dump_file_name[256] = { 0 };
+	sprintf(dump_file_name, "%s.dump", prog_name);
+	FILE* dump_file = fopen(dump_file_name, "w+");
+	INFO("[+] Dumping %s IMG\n", prog_name);
+	for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec)) {
+		for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn)) {
+			RTN_Open(rtn);
+			for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
+				fprintf(dump_file, "%s\n", INS_Disassemble(ins).c_str());
+			}
+			RTN_Close(rtn);
+		}
+	}
+	fflush(dump_file);
+	fclose(dump_file);*/
+
+	INFO("[+] Image %s loaded at 0x%x\n", IMG_Name(img).c_str(), IMG_StartAddress(img));
+	// Find .text section address interval
+	for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec)) {
+		string sec_name = SEC_Name(sec);
+		if (sec_name == TEXT_SEC_NAME) {
+			hasTextSection = true;
+			text_sec_memory = make_pair(SEC_Address(sec), SEC_Address(sec) + SEC_Size(sec));
+		}
+	}
+	if (!hasTextSection) {
+		upx_dump_file = fopen("upx.dump", "w+");
+	}
+}
+
 void Ins(INS ins, void* v) {
 	string disassembled_ins_s = INS_Disassemble(ins);
 	/* Allocate enough space to save
@@ -217,33 +264,15 @@ void Ins(INS ins, void* v) {
 			IARG_THREAD_ID,
 			IARG_END);
 	}
-}
 
-void Img(IMG img, void* v) {
-	if (!strstr(IMG_Name(img).c_str(), prog_name)) return;
-	
-	char dump_file_name[256] = { 0 };
-	sprintf(dump_file_name, "%s.dump", prog_name);
-	FILE* dump_file = fopen(dump_file_name, "w+");
-	INFO("[*] Requesting a dump of the main IMG\n");
-	for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec)) {
-		for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn)) {
-			RTN_Open(rtn);
-			for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
-				fprintf(dump_file, "%s\n", INS_Disassemble(ins).c_str());
-			}
-			RTN_Close(rtn);
-		}
-	}
-	fflush(dump_file);
-	fclose(dump_file);
-	INFO("%s\n", dump_file);
-
-	INFO("[+] Image %s loaded at %x\n", IMG_Name(img).c_str(), IMG_StartAddress(img));
-	for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec)) {
-		string sec_name = SEC_Name(sec);
-		if (sec_name == TEXT_SEC_NAME)
-			text_sec_memory = make_pair(SEC_Address(sec), SEC_Size(sec));
+	ADDRINT ins_addr = INS_Address(ins);
+	/*If we are in online mode, no .text section has been found and instruction
+	in main img address*/
+	if (isOnline && !hasTextSection && (ins_addr >= main_img_memory.first && ins_addr <= main_img_memory.second)) {
+		INS_InsertCall(ins, IPOINT_BEFORE,
+			(AFUNPTR) INS_UPX,
+			IARG_ADDRINT,
+			IARG_END);
 	}
 }
 
@@ -341,21 +370,24 @@ void ApplicationStartFunction(void* v) {
 }
 
 void PrepareForFini(void* v) {
-	INFO("[*] Adding prepare for fini function %d\n", isOnline);
 	if (isOnline) {
 		PIN_LockClient();
-		IMG img = IMG_FindByAddress(text_sec_memory.first);
+		IMG img = IMG_FindByAddress(img_address);
 		ERROR_HANDLER(!IMG_Valid(img), "[x] Invalid image to dump\n");
 		PIN_UnlockClient();
 		char dump_file_name[256] = { 0 };
 		sprintf(dump_file_name, "%s_fini.dump", prog_name);
 		FILE* dump_file = fopen(dump_file_name, "w+");
-		INFO("[*] Requesting a dump of the main IMG\n");
+		INFO("[*] Requesting a dump of the main IMG %s\n", IMG_Name(img).c_str());
+		char sec_f = 0, rtn_f = 0, ins_f = 0;
 		for (SEC sec= IMG_SecHead(img);	SEC_Valid(sec); sec = SEC_Next(sec)) {
+			if (SEC_Name(sec) != TEXT_SEC_NAME) continue;
 			for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); rtn = RTN_Next(rtn)) {
 				RTN_Open(rtn);
 				for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
-					fprintf(dump_file, "%s\n", INS_Disassemble(ins).c_str());
+					ADDRINT ins_addr = INS_Address(ins);
+					if (ins_addr >= main_img_memory.first && ins_addr <= main_img_memory.second)
+						fprintf(dump_file, "%s\n", INS_Disassemble(ins).c_str());
 				}
 				RTN_Close(rtn);
 			}

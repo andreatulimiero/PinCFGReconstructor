@@ -6,8 +6,12 @@
 #include "loggers.h"
 #include "utils.h"
 #include "error_handlers.h"
+#include <iostream>
 
-void INS_Analysis(char* buf, UINT32 buf_len, THREADID thread_idx) {
+void INS_Analysis(char* buf, UINT32 buf_len, THREADID thread_idx, ADDRINT ip) {
+	if (IN_RANGE(ip, main_img_memory.first, main_img_memory.second) &&
+		proc_info->EP == INVALID_ENTRY_POINT) proc_info->EP = ip;
+
 	trace_t* trace = (trace_t*) PIN_GetThreadData(tls_key, thread_idx);
 	// Trace limit guard
 	if (traceLimitGuard(trace, buf_len, thread_idx)) return;

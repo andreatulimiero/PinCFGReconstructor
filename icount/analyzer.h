@@ -76,7 +76,6 @@ extern bool hasReachedTraceLimit[THREADS_MAX_NO];
 
 // Online
 extern upx_info_t* upx_info;
-extern ADDRINT img_address;
 extern bool isBinaryPacked;
 extern FILE* upx_dump_file;
 extern list<pair<ADDRINT, ADDRINT>> written_mem_intervals;

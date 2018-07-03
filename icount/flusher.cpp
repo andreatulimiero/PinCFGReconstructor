@@ -24,12 +24,10 @@ void flusherThread(void* arg) {
 		if (isPoisoned) return;
 		INFO("[*]{Flusher} Received request from thread %d, flushing ...\n", requesting_thread_idx);
 		dbt->isFlushing = true;
-		if (!isOnline) {
-			START_STOPWATCH(tv);
-			flushTraceToFile(f, dbt->flush_buf, dbt->flush_buf_len);
-			total_flusher_flushing_time += GET_STOPWATCH_LAP(tv);
-			free(dbt->flush_buf);
-		} else { /* TODO: Add analysis code for online version */ }
+		START_STOPWATCH(tv);
+		flushTraceToFile(f, dbt->flush_buf, dbt->flush_buf_len);
+		total_flusher_flushing_time += GET_STOPWATCH_LAP(tv);
+		free(dbt->flush_buf);
 		dbt->isFlushing = false;
 		dbt->isFlushBufEmpty = true;
 		PIN_SemaphoreSet(&dbt->end_flush_sem);

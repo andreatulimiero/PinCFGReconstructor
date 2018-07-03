@@ -6,4 +6,4 @@
 #define GET_STOPWATCH_LAP(tv) clock() - tv
 
 /* Math utils */
-#define IN_RANGE(a, b, c) a >= b && a <= c
+#define IN_RANGE(a, b, c) (a >= b && a <= c)

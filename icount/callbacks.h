@@ -2,7 +2,7 @@
 
 #include "pin.H"
 
-void INS_Analysis(char* buf, UINT32 buf_len, THREADID thread_idx);
+void INS_Analysis(char* buf, UINT32 buf_len, THREADID thread_idx, ADDRINT ip);
 void INS_JumpAnalysis(ADDRINT target_branch, INT32 taken, THREADID thread_idx);
 void INS_WriteAnalysis(ADDRINT at, ADDRINT size);
 void INS_UPXEndAnalysis(OPCODE opcode);

@@ -63,7 +63,6 @@ bool hasReachedTraceLimit[THREADS_MAX_NO];
 
 // Online 
 upx_info_t* upx_info;
-ADDRINT img_address;
 bool isBinaryPacked = true;
 FILE* upx_dump_file;
 list<pair<ADDRINT, ADDRINT>> written_mem_intervals;
@@ -149,10 +148,9 @@ bool traceLimitGuard(trace_t* trace, size_t buf_len, THREADID thread_idx) {
 void Img(IMG img, void* v) {
 	if (!IMG_IsMainExecutable(img)) return;
 
-	main_img_memory = make_pair(IMG_LowAddress(img), IMG_LowAddress(img) + IMG_SizeMapped(img));
-	img_address = IMG_LowAddress(img);
+	main_img_memory = make_pair(IMG_LowAddress(img), IMG_HighAddress(img));
 
-	INFO("[+] Image %s loaded at 0x%x\n", IMG_Name(img).c_str(), IMG_StartAddress(img));
+	INFO("[+] Image %s loaded at 0x%08x\n", IMG_Name(img).c_str(), main_img_memory.first);
 	// Find .text section address interval
 	for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec)) {
 		string sec_name = SEC_Name(sec);
@@ -164,6 +162,8 @@ void Img(IMG img, void* v) {
 }
 
 void Ins(INS ins, void* v) {
+	ADDRINT ins_addr = INS_Address(ins);
+
 	string disasm_ins_s = INS_Disassemble(ins);
 	/* Allocate enough space to save
 	- Disassembled instruction (n bytes)
@@ -189,6 +189,7 @@ void Ins(INS ins, void* v) {
 			IARG_UINT32,
 			disasm_ins_len,
 			IARG_THREAD_ID,
+			IARG_INST_PTR,
 			IARG_END);
 
 		INS_InsertCall(ins, IPOINT_BEFORE,
@@ -201,7 +202,6 @@ void Ins(INS ins, void* v) {
 
 	/*If we are in online mode, no .text section has been found and instruction
 	in main img address*/
-	ADDRINT ins_addr = INS_Address(ins);
 	if (isOnline && isBinaryPacked && IN_RANGE(ins_addr, main_img_memory.first, main_img_memory.second)) {
 		if (INS_Opcode(ins) == XED_ICLASS_PUSHAD ||
 			INS_Opcode(ins) == XED_ICLASS_POPAD ||
@@ -339,7 +339,7 @@ void dumpImg(IMG img) {
 
 void dumpSections(IMG img) {
 	for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec)) {
-		INFO("[*] Name: %s, from: 0x%x to: 0x%x\n", SEC_Name(sec).c_str(), SEC_Address(sec), SEC_Address(sec) + SEC_Size(sec))
+		INFO("[*] Name: %s, from: 0x%08x to: 0x%08x\n", SEC_Name(sec).c_str(), SEC_Address(sec), SEC_Address(sec) + SEC_Size(sec))
 		FILE* f = fopen((SEC_Name(sec) + ".dump").c_str(), "w+");
 		char* sec_dump = (char*) malloc(SEC_Size(sec));
 		PIN_SafeCopy(sec_dump, (void*) SEC_Address(sec), SEC_Size(sec));
@@ -353,7 +353,7 @@ void dumpWrittenIntervals() {
 	sprintf(dump_file_name, "%s_written_intervals.dump", prog_name);
 	FILE* dump_file = fopen(dump_file_name, "w+");
 	for each (pair<ADDRINT, ADDRINT> interval in written_mem_intervals) {
-		//INFO("[+] Dumping from 0x%x to 0x%x\n", interval.first, interval.second);
+		//INFO("[+] Dumping from 0x%08x to 0x%08x\n", interval.first, interval.second);
 		char* dump = (char*) malloc(interval.second - interval.first);
 		PIN_SafeCopy(dump, (void*) interval.first, interval.second - interval.first);
 		fprintf(dump_file, "%s", dump);
@@ -364,7 +364,7 @@ void dumpWrittenIntervals() {
 void PrepareForFini(void* v) {
 	if (isOnline) {
 		PIN_LockClient();
-		IMG img = IMG_FindByAddress(img_address);
+		IMG img = IMG_FindByAddress(main_img_memory.first);
 		ERROR_HANDLER(!IMG_Valid(img), "[x] Invalid image to dump\n");
 		PIN_UnlockClient();
 		dumpImg(img);
@@ -393,10 +393,11 @@ void Fini(INT32 code, VOID *v) {
 		REPORT("[i] Average time per flush: %d ms\n", total_flushing_time / total_flushes);
 	}
 	if (isOnline && isBinaryPacked) {
-		REPORT("[i] OEP found at 0x%x\n", upx_info->OEP);
+		REPORT("[i] OEP found at 0x%08x\n", upx_info->OEP);
 		REPORT("[i] Time spent to create intervals %d ms\n", total_writed_intervals_creation_time);
 		REPORT("[i] Time spent to check WXorX rule %d ms\n", total_wxorx_check_time);
 	}
+	REPORT("[i] Entry point 0x%08x\n", proc_info->EP);
 	REPORT("[i] Main thread time: %d ms\n", total_time);
 	//REPORT("Size: %d Mb\n", trace_size/Mb);
 	//REPORT("Threads spawned: %d\n", spawned_threads_no);
@@ -426,6 +427,7 @@ int main(int argc, char *argv[]) {
 
 	// Proc info structure
 	proc_info = (proc_info_t*) malloc(sizeof(proc_info_t));
+	proc_info->EP = INVALID_ENTRY_POINT;
 
 	/* Prepare TLS */
 	tls_key = PIN_CreateThreadDataKey(NULL);

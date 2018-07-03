@@ -1,6 +1,6 @@
 from graphviz import Digraph
 
-dot = Digraph(comment="Alamanas", format='png')
+dot = Digraph(comment="Alamanas")
 
 def parse_trace():
     with open('trace_0.out') as f:

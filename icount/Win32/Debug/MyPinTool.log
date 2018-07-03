@@ -1,5 +1,3 @@
-﻿  analyzer.cpp
-  callbacks.cpp
-  Generating Code...
+﻿  callbacks.cpp
      Creating library C:\Pin35\icount32.lib and object C:\Pin35\icount32.exp
   MyPinTool.vcxproj -> C:\Pin35\icount32.dll

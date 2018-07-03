@@ -8,10 +8,27 @@
 #include "error_handlers.h"
 #include <iostream>
 
-void INS_Analysis(char* buf, UINT32 buf_len, THREADID thread_idx, ADDRINT ip) {
+void INS_EntryPoint(ADDRINT ip, THREADID thread_idx) {
 	if (IN_RANGE(ip, main_img_memory.first, main_img_memory.second) &&
-		proc_info->EP == INVALID_ENTRY_POINT) proc_info->EP = ip;
+		proc_info->EP == INVALID_ENTRY_POINT) {
 
+		proc_info->EP = ip;
+		size_t buf_len = sizeof(ADDRINT) + 2;
+		char* buf = (char*) malloc(buf_len);
+		sprintf(buf, "@%x\0", ip);
+
+		trace_t* trace = (trace_t*) PIN_GetThreadData(tls_key, thread_idx);
+		// Trace limit guard
+		if (traceLimitGuard(trace, buf_len, thread_idx)) return;
+
+		if (isBuffered)
+			recordTraceInMemory(buf, buf_len, trace)
+		else
+			recordTraceToFile(files[thread_idx], buf, buf_len, trace);
+	}
+}
+
+void INS_Analysis(char* buf, UINT32 buf_len, THREADID thread_idx) {
 	trace_t* trace = (trace_t*) PIN_GetThreadData(tls_key, thread_idx);
 	// Trace limit guard
 	if (traceLimitGuard(trace, buf_len, thread_idx)) return;

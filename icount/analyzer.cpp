@@ -163,6 +163,7 @@ void Img(IMG img, void* v) {
 
 void Ins(INS ins, void* v) {
 	ADDRINT ins_addr = INS_Address(ins);
+	if (!IN_RANGE(ins_addr, main_img_memory.first, main_img_memory.second)) return;
 
 	string disasm_ins_s = INS_Disassemble(ins);
 	/* Allocate enough space to save
@@ -181,6 +182,12 @@ void Ins(INS ins, void* v) {
 		strcpy(disasm_ins, disasm_ins + 1);
 	}
 
+	INS_InsertCall(ins, IPOINT_BEFORE,
+		(AFUNPTR) INS_EntryPoint,
+				   IARG_INST_PTR,
+				   IARG_THREAD_ID,
+				   IARG_END);
+
 	if (INS_IsBranchOrCall(ins)) {
 		INS_InsertCall(ins, IPOINT_BEFORE,
 			(AFUNPTR) INS_Analysis,
@@ -189,7 +196,6 @@ void Ins(INS ins, void* v) {
 			IARG_UINT32,
 			disasm_ins_len,
 			IARG_THREAD_ID,
-			IARG_INST_PTR,
 			IARG_END);
 
 		INS_InsertCall(ins, IPOINT_BEFORE,
@@ -200,8 +206,8 @@ void Ins(INS ins, void* v) {
 			IARG_END);
 	}
 
-	/*If we are in online mode, no .text section has been found and instruction
-	in main img address*/
+	/* If we are in online mode, no .text section has been found and instruction
+	in main img address */
 	if (isOnline && isBinaryPacked && IN_RANGE(ins_addr, main_img_memory.first, main_img_memory.second)) {
 		if (INS_Opcode(ins) == XED_ICLASS_PUSHAD ||
 			INS_Opcode(ins) == XED_ICLASS_POPAD ||

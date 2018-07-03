@@ -13,9 +13,13 @@ void INS_EntryPoint(ADDRINT ip, THREADID thread_idx) {
 		proc_info->EP == INVALID_ENTRY_POINT) {
 
 		proc_info->EP = ip;
-		size_t buf_len = sizeof(ADDRINT) + 2;
+		/* Allocate enough space in order to save:
+		- @ char (1 byte)
+		- address in hex format (sizeof(ADDRINT) * 2 bytes) for ip
+		- 0 terminator (1 byte)*/
+		size_t buf_len = sizeof(ADDRINT) * 2 + 2;
 		char* buf = (char*) malloc(buf_len);
-		sprintf(buf, "@%x\0", ip);
+		sprintf(buf, "@%08x\0", ip);
 
 		trace_t* trace = (trace_t*) PIN_GetThreadData(tls_key, thread_idx);
 		// Trace limit guard
@@ -39,25 +43,22 @@ void INS_Analysis(char* buf, UINT32 buf_len, THREADID thread_idx) {
 		recordTraceToFile(files[thread_idx], buf, buf_len, trace);
 }
 
-void INS_JumpAnalysis(ADDRINT target_branch, INT32 taken, THREADID thread_idx) {
+void INS_JumpAnalysis(ADDRINT ins_end, ADDRINT target_branch, INT32 taken, THREADID thread_idx) {
 	if (!taken) return;
 	trace_t* trace = (trace_t*) PIN_GetThreadData(tls_key, thread_idx);
 	/* Allocate enough space in order to save:
 	- @ char (1 byte)
-	- address in hex format (sizeof(ADDRINT) * 2 bytes) + '0x' prefix (2 bytes)
+	- address in hex format (sizeof(ADDRINT) * 2) * 2 bytes for ip and target
 	- \n delimiter (1 byte)
 	- 0 terminator (1 byte)*/
-	size_t buf_len = (sizeof(ADDRINT) * 2 + 5);
+	size_t buf_len = (sizeof(ADDRINT) * 4 + 3);
 	// Trace limit guard
 	if (traceLimitGuard(trace, buf_len, thread_idx)) return;
 
 	char* buf = (char*) malloc(sizeof(char) * buf_len);
 	MALLOC_ERROR_HANDLER(buf, "[x] Not enough space to allocate the buf for the INS_JumpAnalysis\n");
-	buf[0] = '\n';
-	buf[1] = '@';
-	buf[buf_len - 1] = '\0';
 	// Consider removing this sprintf since it is very slow
-	sprintf(buf + 2, "%x", target_branch);
+	sprintf(buf, "\n%08x@%08x\0", ins_end, target_branch);
 
 	if (isBuffered)
 		recordTraceInMemory(buf, buf_len, trace)

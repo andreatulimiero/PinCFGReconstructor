@@ -182,6 +182,7 @@ void Ins(INS ins, void* v) {
 		strcpy(disasm_ins, disasm_ins + 1);
 	}
 
+	/* There should be a better way to find the EP */
 	INS_InsertCall(ins, IPOINT_BEFORE,
 		(AFUNPTR) INS_EntryPoint,
 				   IARG_INST_PTR,
@@ -189,17 +190,21 @@ void Ins(INS ins, void* v) {
 				   IARG_END);
 
 	if (INS_IsBranchOrCall(ins)) {
-		INS_InsertCall(ins, IPOINT_BEFORE,
+		/*INS_InsertCall(ins, IPOINT_BEFORE,
 			(AFUNPTR) INS_Analysis,
 			IARG_PTR,
 			disasm_ins,
 			IARG_UINT32,
 			disasm_ins_len,
 			IARG_THREAD_ID,
-			IARG_END);
+			IARG_END);*/
 
+		
+		ADDRINT ins_end = INS_Address(ins) + INS_Size(ins);
 		INS_InsertCall(ins, IPOINT_BEFORE,
 			(AFUNPTR)INS_JumpAnalysis,
+			IARG_ADDRINT,
+			ins_end,
 			IARG_BRANCH_TARGET_ADDR,
 			IARG_BRANCH_TAKEN,
 			IARG_THREAD_ID,
@@ -349,7 +354,7 @@ void dumpSections(IMG img) {
 		FILE* f = fopen((SEC_Name(sec) + ".dump").c_str(), "w+");
 		char* sec_dump = (char*) malloc(SEC_Size(sec));
 		PIN_SafeCopy(sec_dump, (void*) SEC_Address(sec), SEC_Size(sec));
-		fwrite(sec_dump, sizeof(char), SEC_Size(sec), f);
+		INFO("[+] Dumped %d/%d\n", fwrite(sec_dump, sizeof(char), SEC_Size(sec), f), SEC_Size(sec));
 		fclose(f);
 	}
 }

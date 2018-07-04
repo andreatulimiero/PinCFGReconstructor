@@ -70,7 +70,7 @@ def getDisasmInRange(a:int, b:int):
     if (a > b) :
         print('Switched intervals {} {}'.format(a, b))
     for i in text_instr:
-        if a <= i.address <= b:
+        if a <= i.address < b:
             instructions += [i.disasm]
     if len(instructions) == 0:
         # print('Nothing found from {} to {}'.format(hex(a), hex(b)))

@@ -30,8 +30,8 @@ KNOB <size_t> KnobThreadBufferSize(KNOB_MODE_WRITEONCE, "pintool",
 							 "thread_buffer_size", "0", "size of the per-thread buffer");
 KNOB <BOOL> KnobFavorMainThread(KNOB_MODE_WRITEONCE, "pintool",
 								"favor_main_thread", "false", "allocate a quarter of thread buffer for thread that are not 0");
-KNOB <BOOL> KnobIsOnline(KNOB_MODE_WRITEONCE, "pintool",
-						 "online", "false", "make an online analysis");
+KNOB <string> KnobPerformanceTag(KNOB_MODE_WRITEONCE, "pintool",
+					  "tag", "", "tag for the performance report");
 
 // Stats
 time_t total_time;
@@ -52,9 +52,9 @@ proc_info_t* proc_info;
 bool isBuffered;
 bool isThreadFlushed;
 bool isMainThreadFavored;
-bool isOnline;
 size_t trace_limit;
 size_t thread_buffer_size;
+string performance_tag;
 
 bool isFirstIns = true;
 const char* prog_name;
@@ -170,7 +170,8 @@ void Img(IMG img, void* v) {
 
 void Ins(INS ins, void* v) {
 	ADDRINT ins_addr = INS_Address(ins);
-	if (!IN_RANGE(ins_addr, main_img_memory.first, main_img_memory.second)) return;
+	// TODO: Remove this comment to create the CFG
+	//if (!IN_RANGE(ins_addr, main_img_memory.first, main_img_memory.second)) return;
 
 	string disasm_ins_s = INS_Disassemble(ins);
 	/* Allocate enough space to save
@@ -197,14 +198,14 @@ void Ins(INS ins, void* v) {
 				   IARG_END);
 
 	if (INS_IsBranchOrCall(ins)) {
-		/*INS_InsertCall(ins, IPOINT_BEFORE,
+		INS_InsertCall(ins, IPOINT_BEFORE,
 			(AFUNPTR) INS_Analysis,
 			IARG_PTR,
 			disasm_ins,
 			IARG_UINT32,
 			disasm_ins_len,
 			IARG_THREAD_ID,
-			IARG_END);*/
+			IARG_END);
 
 		
 		ADDRINT ins_end = INS_Address(ins) + INS_Size(ins);
@@ -220,7 +221,7 @@ void Ins(INS ins, void* v) {
 
 	/* If we are in online mode, no .text section has been found and instruction
 	in main img address */
-	if (isOnline && isBinaryPacked && IN_RANGE(ins_addr, main_img_memory.first, main_img_memory.second)) {
+	if (isBinaryPacked && IN_RANGE(ins_addr, main_img_memory.first, main_img_memory.second)) {
 		if (INS_Opcode(ins) == XED_ICLASS_PUSHAD ||
 			INS_Opcode(ins) == XED_ICLASS_POPAD ||
 			INS_Opcode(ins) == XED_ICLASS_JMP) {
@@ -331,8 +332,8 @@ void Config() {
 	thread_buffer_size = KnobThreadBufferSize.Value() > 0 ? KnobThreadBufferSize.Value()*Mb : THREAD_BUFFER_SIZE;
 	INFO("[*] Thread buffer size: %dMb\n", thread_buffer_size/Mb);
 
-	isOnline = KnobIsOnline.Value();
-	INFO("[*] Is online? %d\n", isOnline);
+	performance_tag = KnobPerformanceTag.Value();
+	INFO("[*] Performance tag %s\n", performance_tag.c_str())
 }
 
 void Usage() {
@@ -345,27 +346,25 @@ void ApplicationStartFunction(void* v) {
 }
 
 void PrepareForFini(void* v) {
-	if (isOnline) {
-		PIN_LockClient();
-		IMG img = IMG_FindByAddress(main_img_memory.first);
-		ERROR_HANDLER(!IMG_Valid(img), "[x] Invalid image to dump\n");
-		PIN_UnlockClient();
-		dumpImg(img);
-		dumpSections(img);
-		dumpWrittenIntervals();
-	} else {
-		if (isThreadFlushed) {
-			INFO("[*] Waiting for flusher to terminate\n");
-			flusher::isPoisoned = true;
-			PIN_SemaphoreSet(&flusher::flusher_sem);
-			PIN_WaitForThreadTermination(flusher_uid, PIN_INFINITE_TIMEOUT, NULL);
-		}
+	PIN_LockClient();
+	IMG img = IMG_FindByAddress(main_img_memory.first);
+	ERROR_HANDLER(!IMG_Valid(img), "[x] Invalid image to dump\n");
+	PIN_UnlockClient();
+	dumpImg(img);
+	dumpSections(img);
+	dumpWrittenIntervals();
+
+	if (isThreadFlushed) {
+		INFO("[*] Waiting for flusher to terminate\n");
+		flusher::isPoisoned = true;
+		PIN_SemaphoreSet(&flusher::flusher_sem);
+		PIN_WaitForThreadTermination(flusher_uid, PIN_INFINITE_TIMEOUT, NULL);
 	}
 }
 
 void Fini(INT32 code, VOID *v) {
-	//REPORT("=======================\n");
-	//REPORT("Trace finished\n");
+	REPORT("=======================\n");
+	REPORT("Trace finished\n");
 	if (isThreadFlushed) {
 		REPORT("[i] Time spent to sync with flusher: %d ms\n", total_sync_time);
 		REPORT("[i] Time spent waiting for flusher: %d ms\n", total_wait_time);
@@ -376,15 +375,15 @@ void Fini(INT32 code, VOID *v) {
 		REPORT("[i] Time spent for flushing: %d ms\n", total_flushing_time);
 		REPORT("[i] Average time per flush: %d ms\n", total_flushing_time / total_flushes);
 	}
-	if (isOnline && isBinaryPacked) {
+	if (isBinaryPacked) {
 		REPORT("[i] OEP found at 0x%08x\n", upx_info->OEP);
 		REPORT("[i] Time spent to create intervals %d ms\n", total_writed_intervals_creation_time);
 		REPORT("[i] Time spent to check WXorX rule %d ms\n", total_wxorx_check_time);
 	}
 	REPORT("[i] Entry point 0x%08x\n", proc_info->EP);
 	REPORT("[i] Main thread time: %d ms\n", total_time);
-	//REPORT("Size: %d Mb\n", trace_size/Mb);
-	//REPORT("Threads spawned: %d\n", spawned_threads_no);
+	REPORT("Size: %d Mb\n", trace_size/Mb);
+	REPORT("Threads spawned: %d\n", spawned_threads_no);
 	REPORT("=======================\n");
 
 	makeReport();

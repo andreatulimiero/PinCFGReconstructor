@@ -59,12 +59,12 @@ extern size_t spawned_threads_no;
 extern size_t trace_size;
 extern size_t total_flushes;
 extern proc_info_t* proc_info;
+extern string performance_tag;
 
 // Configs
 extern bool isBuffered;
 extern bool isThreadFlushed;
 extern bool isMainThreadFavored;
-extern bool isOnline;
 extern size_t trace_limit;
 extern size_t thread_buffer_size;
 

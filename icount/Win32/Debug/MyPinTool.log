@@ -1,4 +1,6 @@
-﻿  report.cpp
+﻿  main.cpp
+  report.cpp
+  Generating Code...
      Creating library C:\Pin35\icount32.lib and object C:\Pin35\icount32.exp
 json.obj : warning LNK4217: locally defined symbol ___sF imported in function "private: bool __thiscall Json::OurReader::decodeString(class Json::OurReader::Token &,class std::basic_string<char,class std::char_traits<char>,class std::allocator<char> > &)" (?decodeString@OurReader@Json@@AAE_NAAVToken@12@AAV?$basic_string@DV?$char_traits@D@std@@V?$allocator@D@2@@std@@@Z)
 main.obj : warning LNK4217: locally defined symbol ___sF imported in function "void __cdecl `dynamic initializer for 'KnobTraceLimit''(void)" (??__EKnobTraceLimit@@YAXXZ)

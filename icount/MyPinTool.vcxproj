@@ -294,9 +294,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="analyzer.cpp" />
+    <ClCompile Include="dump.cpp" />
+    <ClCompile Include="main.cpp" />
     <ClCompile Include="callbacks.cpp" />
     <ClCompile Include="flusher.cpp" />
+    <ClCompile Include="json.cpp" />
+    <ClCompile Include="report.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System" />
@@ -308,11 +311,14 @@
   <ItemGroup>
     <ClInclude Include="callbacks.h" />
     <ClInclude Include="constants.h" />
+    <ClInclude Include="dump.h" />
     <ClInclude Include="error_handlers.h" />
     <ClInclude Include="flusher.h" />
-    <ClInclude Include="analyzer.h" />
+    <ClInclude Include="main.h" />
+    <ClInclude Include="json.h" />
     <ClInclude Include="loggers.h" />
     <ClInclude Include="proc.h" />
+    <ClInclude Include="report.h" />
     <ClInclude Include="utils.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

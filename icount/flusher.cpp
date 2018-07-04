@@ -5,7 +5,7 @@
 #include "constants.h"
 #include "utils.h"
 #include "flusher.h"
-#include "analyzer.h"
+#include "main.h"
 
 namespace flusher {
 PIN_SEMAPHORE flusher_ready_sem;

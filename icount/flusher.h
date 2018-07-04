@@ -1,5 +1,5 @@
 #pragma once
-#include "analyzer.h"
+#include "main.h"
 
 namespace flusher {
 void flusherThread(void* arg);

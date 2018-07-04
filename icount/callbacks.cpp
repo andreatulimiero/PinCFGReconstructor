@@ -1,7 +1,7 @@
 #include <list>
 
 #include "callbacks.h"
-#include "analyzer.h"
+#include "main.h"
 #include "constants.h"
 #include "loggers.h"
 #include "utils.h"

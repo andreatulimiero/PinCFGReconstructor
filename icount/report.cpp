@@ -1,23 +1,37 @@
-#include "analyzer.h"
-#include "loggers.h"
+#include <fstream>
+#include "report.h"
 
-void writeReport() {
-	if (isThreadFlushed) {
-		REPORT("[i] Time spent to sync with flusher: %d ms\n", total_sync_time);
-		REPORT("[i] Time spent waiting for flusher: %d ms\n", total_wait_time);
-		REPORT("[i] Time the flusher was flushing: %d ms\n", total_flusher_flushing_time);
-		REPORT("[i] Average time per flush: %d ms\n", total_flusher_flushing_time / total_flushes);
-		REPORT("[i] Time the flusher was running: %d ms\n", total_flusher_time);
-	} else if (isBuffered) {
-		REPORT("[i] Time spent for flushing: %d ms\n", total_flushing_time);
-		REPORT("[i] Average time per flush: %d ms\n", total_flushing_time / total_flushes);
+#include "json.h"
+#include "main.h"
+#include "constants.h"
+
+std::ofstream OutFile;
+
+Json::Value report_j;
+
+void reportImage(IMG img) {
+	string img_name = IMG_Name(img);
+	ADDRINT low_address = IMG_LowAddress(img);
+	ADDRINT high_address = IMG_HighAddress(img);
+	report_j["images"][img_name]["low_address"] = low_address;
+	report_j["images"][img_name]["high_address"] = high_address;
+}
+
+void reportMainImage(IMG img) {
+	string img_name = IMG_Name(img);
+	report_j["main_image"] = img_name;
+}
+
+void makeReport() {
+	if (isBinaryPacked) {
+		// TODO: This has to be found dinamically
+		report_j["text_section"] = "UPX1";
+		report_j["entry_point"] = upx_info->OEP;
+	} else {
+		report_j["text_section"] = TEXT_SEC_NAME;
+		report_j["entry_point"] = proc_info->EP;
 	}
-	if (isOnline && isBinaryPacked) {
-		REPORT("[i] OEP found at 0x%x\n", upx_info->OEP);
-		REPORT("[i] Time spent to create intervals %d ms\n", total_writed_intervals_creation_time);
-		REPORT("[i] Time spent to check WXorX rule %d ms\n", total_wxorx_check_time);
-	}
-	REPORT("[i] Main thread time: %d ms\n", total_time);
-	REPORT("Size: %d Mb\n", trace_size / Mb);
-	REPORT("Threads spawned: %d\n", spawned_threads_no);
+
+	OutFile.open("report.json");
+	OutFile << report_j;
 }

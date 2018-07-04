@@ -1,3 +1,6 @@
-﻿  analyzer.cpp
+﻿  report.cpp
      Creating library C:\Pin35\icount32.lib and object C:\Pin35\icount32.exp
+json.obj : warning LNK4217: locally defined symbol ___sF imported in function "private: bool __thiscall Json::OurReader::decodeString(class Json::OurReader::Token &,class std::basic_string<char,class std::char_traits<char>,class std::allocator<char> > &)" (?decodeString@OurReader@Json@@AAE_NAAVToken@12@AAV?$basic_string@DV?$char_traits@D@std@@V?$allocator@D@2@@std@@@Z)
+main.obj : warning LNK4217: locally defined symbol ___sF imported in function "void __cdecl `dynamic initializer for 'KnobTraceLimit''(void)" (??__EKnobTraceLimit@@YAXXZ)
+callbacks.obj : warning LNK4217: locally defined symbol ___sF imported in function "public: static bool __cdecl LEVEL_PINCLIENT::CLIENT_TLS::IsValidTlsKey(int,unsigned int)" (?IsValidTlsKey@CLIENT_TLS@LEVEL_PINCLIENT@@SA_NHI@Z)
   MyPinTool.vcxproj -> C:\Pin35\icount32.dll

@@ -1,3 +1,8 @@
-#pragma once
+#include "json.h"
+#include "pin.H"
 
-void writeReport();
+void reportImage(IMG img);
+void reportMainImage(IMG img);
+void makeReport();
+
+extern Json::Value report_j;

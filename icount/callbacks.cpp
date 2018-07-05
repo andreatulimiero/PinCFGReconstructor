@@ -65,7 +65,7 @@ void INS_JumpAnalysis(ADDRINT ins_end, ADDRINT target_branch, INT32 taken, THREA
 	else
 		recordTraceToFile(files[thread_idx], buf, buf_len, trace);
 
-	// Since this is created each time the instruction is encountered we can delete this
+	/* Since this buf is either flushed or copied in memory we can free it */
 	free(buf);
 }
 

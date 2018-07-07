@@ -27,7 +27,7 @@ void reportMainImage(IMG img) {
 void makeReport() {
 	if (isBinaryPacked) {
 		// TODO: This has to be found dinamically
-		report_j["text_section"] = "UPX1";
+		report_j["text_section"] = "UPX0";
 		report_j["entry_point"] = upx_info->OEP;
 	} else {
 		report_j["text_section"] = TEXT_SEC_NAME;

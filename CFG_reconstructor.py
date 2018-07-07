@@ -7,6 +7,8 @@ from collections import namedtuple
 TRACE_LIMIT = 9999999
 
 dot = Digraph(comment="Alamanas")
+dot.attr('node', shape='box')
+
 md = Cs(CS_ARCH_X86, CS_MODE_32)
 Instruction = namedtuple('Instruction', 'address disasm')
 
@@ -17,8 +19,10 @@ sections = {}
 
 main_image = ''
 text_instr = []
+global text_low, text_high, text_section
 text_low = 0x0
 text_high = 0x0
+text_section = ''
 
 # Trying to understand why some parts are not found
 global intervals
@@ -41,7 +45,7 @@ def updateIntervals(a, b):
 
 def load_report():
     global report, images, sections
-    global text_low, text_high
+    global text_low, text_high, text_section
     with open("report.json") as f:
         report = json.load(f)
 
@@ -57,9 +61,10 @@ def load_report():
     text_high = text_low + text_size
 
 def disasm_text_section():
+    global text_low, text_high, text_section
     instructions = []
     disasm_file = open("TEXT.disasm", "w+")
-    with open('.text.dump', 'rb') as f:
+    with open(text_section + '.dump', 'rb') as f:
         for i in md.disasm(f.read(), text_low):
             instructions += [Instruction(address=(i.address), disasm=i.mnemonic + ' ' + i.op_str)]
             print("0x%x:\t%s\t%s" %(i.address, i.mnemonic, i.op_str), file=disasm_file)
@@ -95,6 +100,8 @@ def parse_trace():
         for line in f:
             # Cleanup the string
             line = line.replace('\x00', '').strip()
+            if len(line) == 0:
+                continue
             
             ip, target = line.split('@')
             # Very first instruction
@@ -120,6 +127,5 @@ def parse_trace():
 if __name__ == "__main__":
     load_report()
     text_instr = disasm_text_section()
-    dot.attr('node', shape='box')
     parse_trace()
     dot.render('CFG.gv', view=True)

@@ -1,6 +1,18 @@
-﻿  main.cpp
+﻿  dump.cpp
+  main.cpp
+  callbacks.cpp
+  flusher.cpp
+  json.cpp
   report.cpp
   Generating Code...
+c:\users\tulim\works\pincfgreconstructor\icount\json.cpp(3095): warning C4715: 'Json::Value::asString' : not all control paths return a value
+c:\users\tulim\works\pincfgreconstructor\icount\json.cpp(3127): warning C4715: 'Json::Value::asInt' : not all control paths return a value
+c:\users\tulim\works\pincfgreconstructor\icount\json.cpp(3149): warning C4715: 'Json::Value::asUInt' : not all control paths return a value
+c:\users\tulim\works\pincfgreconstructor\icount\json.cpp(3172): warning C4715: 'Json::Value::asInt64' : not all control paths return a value
+c:\users\tulim\works\pincfgreconstructor\icount\json.cpp(3193): warning C4715: 'Json::Value::asUInt64' : not all control paths return a value
+c:\users\tulim\works\pincfgreconstructor\icount\json.cpp(3232): warning C4715: 'Json::Value::asDouble' : not all control paths return a value
+c:\users\tulim\works\pincfgreconstructor\icount\json.cpp(3255): warning C4715: 'Json::Value::asFloat' : not all control paths return a value
+c:\users\tulim\works\pincfgreconstructor\icount\json.cpp(3274): warning C4715: 'Json::Value::asBool' : not all control paths return a value
      Creating library C:\Pin35\icount32.lib and object C:\Pin35\icount32.exp
 json.obj : warning LNK4217: locally defined symbol ___sF imported in function "private: bool __thiscall Json::OurReader::decodeString(class Json::OurReader::Token &,class std::basic_string<char,class std::char_traits<char>,class std::allocator<char> > &)" (?decodeString@OurReader@Json@@AAE_NAAVToken@12@AAV?$basic_string@DV?$char_traits@D@std@@V?$allocator@D@2@@std@@@Z)
 main.obj : warning LNK4217: locally defined symbol ___sF imported in function "void __cdecl `dynamic initializer for 'KnobTraceLimit''(void)" (??__EKnobTraceLimit@@YAXXZ)

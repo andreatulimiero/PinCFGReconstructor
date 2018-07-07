@@ -1,4 +1,4 @@
-$TESTS_NUM = 2
+$TESTS_NUM = 3
 $TRACE_LIMIT = 4090
 
 function clear_env() {
@@ -9,7 +9,7 @@ function clear_reports() {
     Invoke-Expression "rm *.report"
 }
 
-function runTests ($tag, $cmd, $arguments) {
+function runTests ($tag, $base, $arguments) {
     # $highest = -1;
     # $lowest = 999999;
     $totalMillisecondsSum = 0
@@ -17,7 +17,7 @@ function runTests ($tag, $cmd, $arguments) {
         clear_env
         Write-Host "[($i) $tag]"
         $report_tag = "$(Get-Date -Format FileDateTime)" + ".report"
-        $time_span = Measure-Command { Invoke-Expression "$cmd -tag $report_tag $arguments" | Out-Default  }
+        $time_span = Measure-Command { Invoke-Expression "$base -trace_limit $TRACE_LIMIT -tag $report_tag $arguments" | Out-Default  }
         $totalMilliseconds = $time_span.TotalMilliseconds
         $totalMillisecondsSum += $totalMilliseconds
         # if ($totalMilliseconds -gt $highest) { $highest = $totalMilliseconds }
@@ -29,8 +29,12 @@ function runTests ($tag, $cmd, $arguments) {
     Write-Host "{$tag Average time: $avg_time}"
 }
 
-$PROG = "C:\Users\tulim\Downloads\fciv.exe -md5 -sha1 C:\Users\tulim\Downloads\sd_backup.img"
+# $PROG = "C:\Users\tulim\Downloads\fciv.exe -md5 -sha1 C:\Users\tulim\Downloads\ubuntu-17.10-desktop-amd64.iso"
+# $PROG = "C:\Users\tulim\Downloads\fciv.vmp.exe C:\Users\tulim\Downloads\ubuntu-17.10-desktop-amd64.iso"
+# $PROG = "driverquery /V"
+# $PROG = "systeminfo"
 $BASE = "C:\Pin35\pin.exe -t C:\Pin35\icount32.dll -trace_limit $TRACE_LIMIT"
+clear_reports
 Write-Host "--- Beginning Tests for --- $PROG"
 
 $XS_THREAD_BUF = 10
@@ -39,9 +43,10 @@ $MD_THREAD_BUF = 50
 $LG_THREAD_BUF = 100
 $XL_THREAD_BUF = 200
 
-# runTests "Original" "$PROG"
-# runTests "Flushed" "$BASE -- $PROG"
+# runTests "Original" $PROG "--"
 
 # runTests "Buffered ($SM_THREAD_BUF Mb)" $BASE "-buffered -thread_buffer_size $SM_THREAD_BUF -- $PROG"
 
-runTests "Thread flushed ($SM_THREAD_BUF Mb)" $BASE "-thread_flushed -thread_buffer_size $SM_THREAD_BUF -- $PROG"
+# runTests "Thread flushed ($SM_THREAD_BUF Mb)" $BASE "-thread_flushed -thread_buffer_size $SM_THREAD_BUF -- $PROG"
+
+runTests "Flushed" $BASE "-- $PROG"

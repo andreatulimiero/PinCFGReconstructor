@@ -171,7 +171,7 @@ void Img(IMG img, void* v) {
 void Ins(INS ins, void* v) {
 	ADDRINT ins_addr = INS_Address(ins);
 	// TODO: Remove this comment to create the CFG
-	//if (!IN_RANGE(ins_addr, main_img_memory.first, main_img_memory.second)) return;
+	if (!IN_RANGE(ins_addr, main_img_memory.first, main_img_memory.second)) return;
 
 	string disasm_ins_s = INS_Disassemble(ins);
 	/* Allocate enough space to save
@@ -191,21 +191,21 @@ void Ins(INS ins, void* v) {
 	}
 
 	/* There should be a better way to find the EP */
-	INS_InsertCall(ins, IPOINT_BEFORE,
+	/*INS_InsertCall(ins, IPOINT_BEFORE,
 		(AFUNPTR) INS_EntryPoint,
 				   IARG_INST_PTR,
 				   IARG_THREAD_ID,
-				   IARG_END);
+				   IARG_END);*/
 
 	if (INS_IsBranchOrCall(ins)) {
-		INS_InsertCall(ins, IPOINT_BEFORE,
+		/*INS_InsertCall(ins, IPOINT_BEFORE,
 			(AFUNPTR) INS_Analysis,
 			IARG_PTR,
 			disasm_ins,
 			IARG_UINT32,
 			disasm_ins_len,
 			IARG_THREAD_ID,
-			IARG_END);
+			IARG_END);*/
 
 		
 		ADDRINT ins_end = INS_Address(ins) + INS_Size(ins);
@@ -219,6 +219,8 @@ void Ins(INS ins, void* v) {
 			IARG_END);
 	}
 
+	// FIXME: Remove this, testing only
+	return;
 	/* If we are in online mode, no .text section has been found and instruction
 	in main img address */
 	if (isBinaryPacked && IN_RANGE(ins_addr, main_img_memory.first, main_img_memory.second)) {

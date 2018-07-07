@@ -1,7 +1,0 @@
-{
-	"average_flush_time" : 0,
-	"flushing_time" : 0,
-	"main_thread_time" : 13724,
-	"mode" : "buffered",
-	"trace_size" : 46
-}

@@ -16,3 +16,8 @@ it carries with it some performance and accuracy trade-offs. In this project we 
 build tools to record instructions and reconstruct the control flow graph of a possibly
 malicious program, discussing during the journey the challenges introduced by the
 usage of DBI and proposing some solutions to mitigate these problems.
+
+### Thanks
+This work has been possible thanks to:
+[Capstone](https://github.com/aquynh/capstone)
+[Graphviz](https://gitlab.com/graphviz/graphviz)

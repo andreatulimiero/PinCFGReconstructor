@@ -19,9 +19,10 @@ usage of DBI and proposing some solutions to mitigate these problems.
 
 ### Dependencies
 - [Intel PIN](https://software.intel.com/sites/landingpage/pintool/downloads/pin-3.5-97503-gac534ca30-msvc-windows.zip)
-- The solution has been compiled using Visual Studio 2010 (v100) toolset. I strongly advise to install [Visual C++ 2010 Express Edition](https://my.visualstudio.com/Downloads?q=visual%20studio%202010&wt.mc_id=o~msft~vscom~older-downloads) (to get the toolset), and then using Visual Studio 2015 or later to compile.
 - [Capstone](https://www.capstone-engine.org/download.html)
 - [Graphviz](https://www.graphviz.org/download)
+- [Python 3.6.3](https://www.python.org/downloads/release/python-363)
+- The solution has been compiled using Visual Studio 2010 (v100) toolset. I strongly advise to install [Visual C++ 2010 Express Edition](https://my.visualstudio.com/Downloads?q=visual%20studio%202010&wt.mc_id=o~msft~vscom~older-downloads) (to get the toolset), and then using Visual Studio 2015 or later IDE.
 
 ### Usage
 Assuming Intel Pin folder is located at `C:\Pin35`, you can launch the tool with the following structure:

@@ -31,17 +31,17 @@ By default the tool uses the Unbuffered version and generates a trace of 2Gb max
 
 #### Options
 Apart from the standard switches of Intel Pin, the Pintool can be configured with these additional switches:
-- buffered  [default false]
+- -**buffered**  [default false]:
         whether or not the trace is buffered
-- thread_flushed  [default false]
+- -**thread_flushed**  [default false]:
         whether or not the trace has a thread for flushing
-- favor_main_thread  [default false]
+- -**favor_main_thread**  [default false]:
         allocate a quarter of thread buffer for threads that are not the main one
-- tag  [default ]
-        tag for the performance report
-- thread_buffer_size  [default 30Mb]
+- -**tag**  [default ""]:
+        tag for the performance report. If missing no report will be generated
+- -**thread_buffer_size**  [default 30Mb]:
         size of the per-thread buffer
-- trace_limit  [default 2Gb]
+- -**trace_limit**  [default 2Gb]:
         size of the trace limit
 
 ### Thanks

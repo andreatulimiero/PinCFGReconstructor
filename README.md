@@ -41,7 +41,7 @@ Apart from the standard switches of Intel Pin, the Pintool can be configured wit
 - -**thread_flushed**  [default false]:
         whether or not the trace has a thread for flushing
 - -**favor_main_thread**  [default false]:
-        allocate a quarter of thread buffer for threads that are not the main one
+        allocate only a quarter of thread buffer for threads that are not the main one
 - -**tag**  [default ""]:
         tag for the performance report. If missing no report will be generated
 - -**thread_buffer_size**  [default 30Mb]:

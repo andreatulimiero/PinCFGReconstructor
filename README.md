@@ -1,7 +1,7 @@
 # PinCFGReconstructor
 
 ## TL;DR
-A Pintool that reconstructs the Control Flow Graph (CFG) of plain and UPX packed executables.
+An efficient Pintool to reconstruct the Control Flow Graph (CFG) of plain and UPX packed executables.
 
 ## Abstract
 With the development of increasingly advanced techniques to hide the malicious 

@@ -53,6 +53,4 @@ Apart from the standard switches of Intel Pin, the Pintool can be configured wit
 The tool has been tested on Win32 only with UPX packer.
 
 ## Thanks
-This work has been possible thanks to:
-[Capstone](https://github.com/aquynh/capstone)
-[Graphviz](https://gitlab.com/graphviz/graphviz)
+This work has also been possible thanks to: [Capstone](https://github.com/aquynh/capstone) and [Graphviz](https://gitlab.com/graphviz/graphviz)

@@ -34,7 +34,7 @@ By default the tool uses the Unbuffered version and generates a trace of 2Gb max
 Once the tool finishes instrumenting the executable it generates: a (i)`trace.out` file; a (ii)dump of each of the sections of the program; and a (iii) `report.json` file containing information about the executed programs (e.g.: Sections' low addresses and size).  
 Once the analysis is finished, the CFG can be reconstructed by launching `python CFG_reconstructor.py`. A PDF of the CFG will be shown and a file called CFG.gv.pdf will be created
 
-#### Pintooll otions
+#### Pintool otions
 Apart from the standard switches of Intel Pin, the Pintool can be configured with these additional switches:
 - -**buffered**  [default false]:
         whether or not the trace is buffered
